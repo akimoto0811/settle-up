@@ -5,7 +5,7 @@
   --scrim:rgba(10,20,16,.45);
   --display:"Bricolage Grotesque","Noto Sans TC","PingFang TC","Segoe UI",system-ui,sans-serif;
   --body:"Figtree","Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,-apple-system,sans-serif;
-  --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+  --mono:"Figtree","Noto Sans TC","PingFang TC",system-ui,-apple-system,sans-serif;
   --gutter-l:max(16px,env(safe-area-inset-left,0px));
   --gutter-r:max(16px,env(safe-area-inset-right,0px));
   --tabbar-h:58px;
@@ -26,7 +26,7 @@ svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke
 button{font:inherit;color:inherit}
 input,select,textarea{font:inherit;font-size:16px;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;width:100%;min-width:0}
 input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.num{font-family:var(--body);font-variant-numeric:tabular-nums}
 
 /* top bar */
 .topbar{position:sticky;top:0;z-index:30;background:var(--bg);border-bottom:1px solid var(--line);padding:calc(env(safe-area-inset-top,0px) + 10px) var(--gutter-r) 10px var(--gutter-l)}
@@ -296,3 +296,31 @@ body.in-group .toast{bottom:calc(var(--dock-h) + 30px + env(safe-area-inset-bott
 .ptr{top:calc(env(safe-area-inset-top,0px) + 12px)}
 .group-view .pad{padding-top:6px}
 .group-view .sec-head{margin-top:14px}
+
+/* ===== polish: green header behind the status bar on every screen ===== */
+html{background:var(--hero)}
+body{font-variant-numeric:tabular-nums}
+.topbar{background:var(--hero);color:var(--hero-fg);border-bottom:0}
+.topbar .logo{color:var(--hero-fg)}
+.topbar .logo span{color:#9fe1cb}
+.topbar .lang,.topbar .chip-btn{background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.22);color:var(--hero-fg)}
+.topbar .lang option{color:#17231f}
+body:not(.in-group) .main{padding-top:20px}
+.hero{padding-top:calc(env(safe-area-inset-top,0px) + 6px)}
+.hero-num{font-family:var(--body);font-weight:700;font-size:2.5rem;letter-spacing:-.025em;margin-top:6px}
+.pay-row .num{font-weight:700}
+.pp .nv{font-family:var(--body);font-weight:700;font-size:.78rem}
+.lrow .amt,.it .end .v{font-family:var(--body);font-weight:700;font-size:.95rem}
+.page-head{background:var(--hero);color:var(--hero-fg);padding:calc(env(safe-area-inset-top,0px) + 14px) var(--gutter-r) 18px var(--gutter-l);border-radius:0 0 24px 24px}
+.page-head h1{font-family:var(--body);font-weight:700}
+.filters{padding-top:14px}
+/* calmer dock */
+.dock{box-shadow:0 2px 12px rgba(10,30,24,.08);height:60px;width:min(300px,calc(100vw - 40px))}
+.dock .plus{width:54px;height:54px;margin-top:-22px;border:4px solid var(--bg);box-shadow:none}
+.dock .plus svg{width:24px;height:24px}
+/* add form: green header so the status bar stays readable */
+.sheet.full{padding-top:0}
+.sheet.full .add-head{background:var(--hero);color:var(--hero-fg);margin:0 calc(-1 * var(--gutter-r)) 0 calc(-1 * var(--gutter-l));padding:calc(env(safe-area-inset-top,0px) + 6px) var(--gutter-r) 10px var(--gutter-l)}
+.sheet.full .add-head .icon-btn{color:var(--hero-fg)}
+.amount-input{font-family:var(--body)!important}
+.detail-amt{font-family:var(--body)}
