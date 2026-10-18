@@ -67,9 +67,13 @@ Whoever creates a group is its admin. In **⋯ Group settings → People and adm
 
 The app comes in English and Traditional Chinese (繁體中文). It picks the phone's language automatically, and anyone can switch with the picker at the top right. To add another language, copy the `en` block in `i18n.js`, translate the values, and add it to the picker in `index.html`.
 
+## Layout
+
+Inside a group, **Home** shows your overall balance in the green card, with one-tap **Mark paid** / **Mark received** for your payments, everyone's balance as avatars, and recent expenses. **Activity** lists everything by day, with filters. The round **+** button opens the full-screen Add expense form. Tap any expense for details (and Delete), or any avatar for that person's Paid / Share / Net.
+
 ## Sharing a summary
 
-On the **Balances** tab, **Share summary** creates a message with who pays whom, everyone's balance and (optionally) the full expense list. WhatsApp and Email open with the message filled in. Signal and More apps open the phone's share sheet. Copy text works everywhere.
+On **Home**, **Share summary** creates a message with who pays whom, everyone's balance and (optionally) the full expense list. WhatsApp and Email open with the message filled in. Signal and More apps open the phone's share sheet. Copy text works everywhere.
 
 ## Trips abroad
 

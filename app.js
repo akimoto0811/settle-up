@@ -44,7 +44,7 @@ const ICON = {
 let S = blankGroup(null);
 let unsubs = [];
 let db, auth, uid = null, account = null;
-let forceJoin = false, migrating = false, tab = "add";
+let forceJoin = false, migrating = false, tab = "home", actFilter = "all";
 function blankGroup(id) { return { id, name: "", currency: "USD", legacy: false, hasAdminFlag: false, people: [], peopleDocs: [], expenses: [], loaded: { people: false } } }
 
 const me = () => S.peopleDocs.find(p => p.uid && p.uid === uid) || null;
@@ -142,15 +142,14 @@ function show(view) {
   if (view !== "loading") clearTimeout(loadingT);
   $("loadingView").hidden = view !== "loading";
   const inGroup = view === "group";
-  $("barStart").hidden = inGroup; $("barGroup").hidden = !inGroup;
+  document.body.classList.toggle("in-group", inGroup);
   $("startView").hidden = view !== "start";
   $("joinView").hidden = view !== "join";
-  $("tabAdd").hidden = !(inGroup && tab === "add");
-  $("tabBalances").hidden = !(inGroup && tab === "balances");
-  $("tabbar").hidden = !inGroup;
-  document.body.classList.toggle("has-tabs", inGroup);
-  $("tabBtnAdd").classList.toggle("on", tab === "add");
-  $("tabBtnBal").classList.toggle("on", tab === "balances");
+  $("homeView").hidden = !(inGroup && tab === "home");
+  $("activityView").hidden = !(inGroup && tab === "activity");
+  $("dock").hidden = !inGroup;
+  $("tabBtnHome").classList.toggle("on", tab === "home");
+  $("tabBtnAct").classList.toggle("on", tab === "activity");
 }
 const groupLink = () => location.href.split("#")[0].split("?")[0] + "#" + S.id;
 async function copyText(text, okMsg) {
@@ -160,12 +159,33 @@ async function copyText(text, okMsg) {
 
 // ---------- sheets ----------
 let sheetName = null, sheetRender = null;
+// Each open sheet adds a history entry, so Android's back gesture (and browser back) closes the sheet first
+let sheetPushed = false;
 function openSheet(name, renderFn) {
+  if (!sheetName && !sheetPushed) { history.pushState({ sheet: 1 }, ""); sheetPushed = true }
+  if (sheetName === "add" && name !== "add") { const f = $("expForm"); if (f) $("addHolder").appendChild(f) }
   sheetName = name; sheetRender = renderFn;
+  $("sheet").classList.toggle("full", name === "add");
   $("sheetWrap").hidden = false; document.body.classList.add("sheet-open");
   renderFn($("sheet"));
 }
-function closeSheet() { sheetName = null; sheetRender = null; $("sheetWrap").hidden = true; $("sheet").innerHTML = ""; document.body.classList.remove("sheet-open") }
+function hideSheet() {
+  sheetName = null; sheetRender = null; $("sheetWrap").hidden = true;
+  const f = $("expForm"); if (f && f.parentElement !== $("addHolder")) $("addHolder").appendChild(f);
+  $("sheet").innerHTML = ""; $("sheet").classList.remove("full"); document.body.classList.remove("sheet-open");
+}
+function closeSheet() {
+  if (!sheetName && !sheetPushed) return;
+  hideSheet();
+  if (sheetPushed) { sheetPushed = false; history.back() }
+}
+// Go somewhere from inside a sheet: replace the sheet's history entry instead of stacking a new one
+function navTo(hash) {
+  if (sheetName) hideSheet();
+  if (sheetPushed) { sheetPushed = false; location.replace(location.pathname + location.search + (hash ? "#" + hash : "#")) }
+  else location.hash = hash;
+}
+window.addEventListener("popstate", () => { if (sheetPushed || sheetName) { sheetPushed = false; hideSheet() } });
 function refreshSheet() { if (sheetRender) sheetRender($("sheet")) }
 $("sheetWrap").addEventListener("click", e => { if (e.target === $("sheetWrap")) closeSheet() });
 document.addEventListener("keydown", e => { if (e.key === "Escape" && sheetName) closeSheet() });
@@ -201,13 +221,13 @@ function forgetGroup(gid) {
 // ---------- routing ----------
 const groupIdFromHash = () => (location.hash.match(/^#([A-Za-z0-9]{16,40})$/) || [])[1] || null;
 window.addEventListener("hashchange", route);
-function goHome() { session.set("settleup.stayHome", "1"); location.hash = "" }
+function goHome() { session.set("settleup.stayHome", "1"); navTo("") }
 
 function route() {
   if (!uid) return;
   unsubs.forEach(u => u()); unsubs = [];
   forceJoin = false; selectedPerson = null;
-  if (sheetName && sheetName !== "signin") closeSheet();
+  if (sheetName && sheetName !== "signin") { sheetPushed = false; hideSheet() }
   const gid = groupIdFromHash();
   if (!gid) {
     const last = store.get("settleup.last", null);
@@ -357,7 +377,7 @@ $("createForm").addEventListener("submit", async e => {
     // Don't wait for the server: the new group shows straight away from the phone's copy, and the save finishes in the background
     b.commit().catch(e3 => { console.error(e3); forgetGroup(gref.id); goHome(); status(t("createFail"), true) });
     $("groupName").value = ""; $("founderName").value = ""; $("createForm").hidden = true;
-    tab = "add";
+    tab = "home";
     location.hash = gref.id;
     setTimeout(() => toast(t("createdToast")), 300);
   } catch (e2) { console.error(e2); err.textContent = t("createFail") }
@@ -461,11 +481,11 @@ $("switchBtn").onclick = () => openSheet("switch", async el => {
   el.innerHTML = `${sheetHead(t("switchGroup"))}<div class="menu" id="gList"><p class="hint">…</p></div>
     <button class="btn ghost wide" id="toHome" type="button">${esc(t("allGroupsNew"))}</button>`;
   wireClose(el);
-  $("toHome").onclick = () => { closeSheet(); goHome() };
+  $("toHome").onclick = () => goHome();
   const list = await allMyGroups();
   if (sheetName !== "switch") return;
   $("gList").innerHTML = list.map(g => `<button class="mi" type="button" data-g="${esc(g.id)}">${g.id === S.id ? ICON.check : ICON.users}<span>${esc(g.name || t("groupFallback"))}</span>${g.id === S.id ? `<span class="side">${esc(t("current"))}</span>` : ""}</button>`).join("");
-  $("gList").querySelectorAll("[data-g]").forEach(b => b.onclick = () => { closeSheet(); if (b.dataset.g !== S.id) { tab = "add"; location.hash = b.dataset.g } });
+  $("gList").querySelectorAll("[data-g]").forEach(b => b.onclick = () => { if (b.dataset.g !== S.id) { tab = "home"; navTo(b.dataset.g) } else closeSheet() });
 });
 async function shareInvite() {
   const url = groupLink();
@@ -475,6 +495,24 @@ async function shareInvite() {
 $("inviteBtn").onclick = shareInvite;
 $("menuBtn").onclick = openSettings;
 document.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => { tab = b.dataset.tab; show("group"); window.scrollTo({ top: 0 }) });
+$("seeAllBtn").onclick = () => { tab = "activity"; show("group"); window.scrollTo({ top: 0 }) };
+$("filters").addEventListener("click", e => {
+  const b = e.target.closest("[data-f]"); if (!b) return;
+  actFilter = b.dataset.f;
+  $("filters").querySelectorAll("[data-f]").forEach(x => x.classList.toggle("on", x === b));
+  renderActivity();
+});
+$("plusBtn").onclick = openAdd;
+$("addClose").onclick = () => closeSheet();
+function openAdd() {
+  if (!me()) return;
+  openSheet("add", el => {
+    if ($("expForm").parentElement !== el) { el.innerHTML = ""; el.appendChild($("expForm")) }
+    $("expErr").textContent = "";
+    renderSplit(); refreshFxLabels(); preview(); updateDescIcon();
+  });
+  setTimeout(() => $("amount").focus(), 250);
+}
 
 // ---------- settings sheet ----------
 function openSettings() {
@@ -656,7 +694,7 @@ async function deleteGroup() {
   unsubs.forEach(u => u()); unsubs = [];
   forgetGroup(gid);
   deleting = false;
-  closeSheet(); toast(t("deletedToast")); goHome();
+  toast(t("deletedToast")); goHome();
 }
 
 // ---------- share summary ----------
@@ -809,60 +847,171 @@ $("shareSumBtn").onclick = () => openSheet("share", async el => {
   };
 });
 
+// ---------- look helpers ----------
+const initials = n => { const w = String(n).trim().split(/\s+/); return (w.length > 1 ? w[0][0] + w[1][0] : String(n).slice(0, 2)).toUpperCase() };
+const avClass = n => { let h = 0; for (const c of String(n)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return "av" + (h % 6) };
+const avatar = (n, size = "") => `<span class="av ${avClass(n)} ${size}" aria-hidden="true">${esc(initials(n))}</span>`;
+const CATS = [
+  ["food", /dinner|lunch|breakfast|brunch|meal|food|restaurant|eat|pizza|sushi|bbq|burger|noodle|ramen|snack|晚餐|午餐|早餐|餐|飯|食|宵夜/i, '<path d="M7 3v8M5 3v5a2 2 0 0 0 4 0V3M7 11v10M17 3c-2 2-3 5-3 8h3v10"/>'],
+  ["drink", /coffee|cafe|tea|drink|bar|beer|wine|cocktail|pub|咖啡|茶|飲|酒|啤/i, '<path d="M5 8h12v5a5 5 0 0 1-5 5h-2a5 5 0 0 1-5-5zM17 9h2a2 2 0 0 1 0 4h-2M8 3v2M12 3v2"/>'],
+  ["flight", /flight|plane|airline|airport|air ?ticket|機票|航班|飛機|機場/i, '<path d="M10 14l-6-2 1-2 7 1 4-5a1.5 1.5 0 0 1 2 2l-5 4 1 7-2 1-2-6z"/>'],
+  ["transport", /taxi|uber|grab|lyft|bus|train|metro|mrt|subway|car|gas|fuel|petrol|parking|toll|scooter|bike|ferry|boat|的士|計程車|車|巴士|地鐵|油|泊車|船/i, '<path d="M5 17h14M6 17l1.5-6h9L18 17M7 17v2M17 17v2"/><circle cx="8" cy="14" r=".6"/><circle cx="16" cy="14" r=".6"/>'],
+  ["stay", /hotel|airbnb|villa|hostel|room|lodge|resort|apartment|rent|酒店|住宿|民宿|房|租/i, '<path d="M3 18V8M3 14h18v4M21 14v-2a3 3 0 0 0-3-3h-7v5M7 11.5a1.5 1.5 0 1 0 0-.01"/>'],
+  ["grocery", /grocer|supermarket|market|7-?eleven|mart|超市|買餸|街市|便利店/i, '<path d="M4 5h2l2 10h10l2-7H7M10 19.5a1 1 0 1 0 0-.01M17 19.5a1 1 0 1 0 0-.01"/>'],
+  ["fun", /ticket|tour|museum|park|show|movie|cinema|concert|game|karaoke|spa|massage|diving|surf|門票|活動|戲|演唱會|遊|按摩/i, '<path d="M4 8a2 2 0 0 0 0 4v4h16v-4a2 2 0 0 1 0-4V4H4zM10 4v12" stroke-dasharray="2 2"/>'],
+  ["shop", /shop|gift|store|souvenir|clothes|mall|購物|禮物|手信|衫/i, '<path d="M5 8h14l-1 12H6zM9 8V6a3 3 0 0 1 6 0v2"/>'],
+];
+const OTHER_ICON = '<path d="M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6"/>';
+const REPAY_ICON = '<path d="M7 7h12l-3-3M17 17H5l3 3"/>';
+function category(desc, payment) {
+  if (payment) return { c: "repay", svg: REPAY_ICON };
+  for (const [c, re, svg] of CATS) if (re.test(desc || "")) return { c, svg };
+  return { c: "other", svg: OTHER_ICON };
+}
+const catIcon = (desc, payment) => { const k = category(desc, payment); return `<span class="cat-icon c-${k.c}" aria-hidden="true"><svg viewBox="0 0 24 24">${k.svg}</svg></span>` };
+function updateDescIcon() { const k = category($("desc").value, false); $("descIcon").className = "cat-icon c-" + k.c; $("descIcon").innerHTML = `<svg viewBox="0 0 24 24">${k.svg}</svg>` }
+$("desc").addEventListener("input", updateDescIcon);
+const dayKey = ts => { const d = new Date(ts || 0); return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime() };
+function dayLabel(k) {
+  const today = dayKey(Date.now()), y = today - 864e5;
+  if (k === today) return t("today");
+  if (k === y) return t("yesterday");
+  return new Date(k).toLocaleDateString(locale(), { weekday: "short", month: "short", day: "numeric" });
+}
+
+// One expense row in the feed
+function expenseRow(e, myName) {
+  const fx = e.origCurrency && e.origCurrency !== S.currency;
+  let title = e.desc, sub, end2 = "";
+  if (e.payment) {
+    title = t("repaidLine", { from: e.payer === myName ? t("you") : e.payer, to: e.split[0] === myName ? t("youObj") : e.split[0] });
+    sub = t("repayment");
+  } else {
+    sub = (e.payer === myName ? t("youPaid") : t("xPaid", { name: e.payer })) + " · " + (fx ? fmtAmount(e.origAmount, e.origCurrency) : t("splitWays", { n: e.split.length }));
+    const myShare = (shares(e.cents, e.split).find(([p]) => p === myName) || [, 0])[1];
+    if (e.payer === myName) { const lent = e.cents - myShare; end2 = lent > 0 ? `<div class="sub get-t">${esc(t("youLentX", { x: fmtMinor(lent) }))}</div>` : "" }
+    else if (myShare) end2 = `<div class="sub owe-t">${esc(t("youOweX", { x: fmtMinor(myShare) }))}</div>`;
+    else end2 = `<div class="sub">${esc(t("notInvolved"))}</div>`;
+  }
+  return `<button class="it" type="button" data-exp="${esc(e.id)}">${catIcon(e.desc, e.payment)}<div class="mid"><div class="ttl">${esc(title)}</div><div class="sub">${esc(sub)}</div></div><div class="end"><div class="v">${fmtMinor(e.cents)}</div>${end2}</div></button>`;
+}
+function wireExpenseRows(root) { root.querySelectorAll("[data-exp]").forEach(b => b.onclick = () => openExpense(b.dataset.exp)) }
+
 // ---------- render group ----------
 function render() {
-  const mine = me(), myName = mine.name, admin = amAdmin();
+  const mine = me(), myName = mine.name;
   $("gName").textContent = S.name;
-
-  // balances tab
   const b = balances(S.people, S.expenses), tx = settle(b);
-  $("txCount").textContent = tx.length ? (tx.length > 1 ? t("payments", { n: tx.length }) : t("payment1")) : "";
-  $("transfers").innerHTML = tx.length ? tx.map((x, k) => {
-    const involved = x.from === myName || x.to === myName;
-    return `<div class="tx${involved ? " mine" : ""}"><div class="who">${esc(x.from === myName ? t("you") : x.from)}<span class="arrow">${x.from === myName ? t("pay") : t("pays")}</span>${esc(x.to === myName ? t("youObj") : x.to)}</div><div class="amt num">${fmtMinor(x.cents)}</div>${involved ? `<button class="btn small ghost done-btn" data-pay="${k}" type="button">${t("markPaid")}</button>` : ""}</div>`;
-  }).join("")
-    : `<div class="settled">${S.expenses.length ? t("settledEven") : S.people.length < 2 ? t("settledInvite") : t("settledLog")}</div>`;
+  const total = S.expenses.filter(e => !e.payment).reduce((x, e) => x + e.cents, 0);
+  const myNet = b[myName] || 0;
+
+  // balance card
+  $("heroNum").textContent = myNet === 0 ? fmtMinor(0) : (myNet > 0 ? "+" : "−") + fmtMinor(Math.abs(myNet));
+  $("heroSub").textContent = (myNet < 0 ? t("youOweOverall") : myNet > 0 ? t("youAreOwed") : t("allSettled")) + (total ? " · " + t("groupSpent", { x: fmtMinor(total) }) : "");
+  const myTx = tx.filter(x => x.from === myName || x.to === myName);
+  $("heroPays").innerHTML = myTx.map(x => {
+    const iPay = x.from === myName, other = iPay ? x.to : x.from;
+    return `<div class="pay-row">${avatar(other, "sm")}<span class="txt">${iPay ? t("payX", { name: `<b>${esc(other)}</b>` }) : t("xPaysYou", { name: `<b>${esc(other)}</b>` })} <span class="num">${fmtMinor(x.cents)}</span></span><button type="button" data-pay="${tx.indexOf(x)}">${esc(iPay ? t("markPaid") : t("markReceived"))}</button></div>`;
+  }).join("");
   document.querySelectorAll("[data-pay]").forEach(btn => btn.onclick = () => {
     const x = tx[+btn.dataset.pay]; btn.disabled = true;
-    act(() => api.addExpense({ desc: t("paymentDesc", { from: x.from, to: x.to }), cents: x.cents, payer: x.from, split: [x.to], payment: true }));
+    act(() => api.addExpense({ desc: t("paymentDesc", { from: x.from, to: x.to }), cents: x.cents, payer: x.from, split: [x.to], payment: true }))
+      .then(ok => ok && toast(t("markedPaid")));
   });
-  const total = S.expenses.filter(e => !e.payment).reduce((s, e) => s + e.cents, 0);
-  $("total").textContent = total ? t("totalSpent", { x: fmtMinor(total) }) : "";
-  const max = Math.max(1, ...Object.values(b).map(Math.abs));
-  $("balances").innerHTML = S.people.length ? S.people.map(p => {
-    const v = b[p], w = Math.abs(v) / max * 50, cls = v > 0 ? "pos" : v < 0 ? "neg" : "zero";
-    const bar = v ? `<i style="${v > 0 ? "left:50%" : "right:50%"};width:${w}%;background:var(${v > 0 ? "--get" : "--owe"})"></i>` : "";
-    const label = v > 0 ? t("gets", { x: fmtMinor(v) }) : v < 0 ? t("owes", { x: fmtMinor(-v) }) : t("even");
-    return `<div class="bal-row"><span class="name" title="${esc(p)}">${esc(p)}${p === myName ? t("youSuffix") : ""}</span><div class="bar-track">${bar}</div><span class="v num ${cls}">${label}</span></div>`;
-  }).join("") : `<p class="empty">${t("noOneHere")}</p>`;
+
+  // people strip
+  $("peopleStrip").innerHTML = S.people.map(p => {
+    const v = b[p] || 0;
+    return `<button class="pp" type="button" data-person="${esc(p)}">${avatar(p)}<span class="nm">${esc(p === myName ? t("you") : p)}</span><span class="nv ${v > 0 ? "get-t" : v < 0 ? "owe-t" : ""}">${v === 0 ? "0" : (v > 0 ? "+" : "−") + (Math.abs(v) / unit(S.currency)).toFixed(digits(S.currency))}</span></button>`;
+  }).join("") + `<button class="pp" type="button" id="stripInvite"><span class="av add" aria-hidden="true">+</span><span class="nm" style="color:var(--muted)">${esc(t("invite"))}</span></button>`;
+  $("peopleStrip").querySelectorAll("[data-person]").forEach(x => x.onclick = () => openPerson(x.dataset.person));
+  $("stripInvite").onclick = shareInvite;
+
+  // other people's payments
+  const others = tx.filter(x => x.from !== myName && x.to !== myName);
+  $("othersHead").hidden = !others.length; $("othersList").hidden = !others.length;
+  $("othersList").innerHTML = others.map(x => `<div class="lrow">${avatar(x.from, "sm")}<span class="txt">${t("xPaysY", { from: `<b>${esc(x.from)}</b>`, to: `<b>${esc(x.to)}</b>` })}</span><span class="amt">${fmtMinor(x.cents)}</span></div>`).join("");
+
+  // recent
+  const sorted = [...S.expenses].sort((a, c) => (c.createdAt || 0) - (a.createdAt || 0));
+  $("recentList").innerHTML = sorted.length ? sorted.slice(0, 4).map(e => expenseRow(e, myName)).join("")
+    : `<p class="empty-state">${esc(S.people.length < 2 ? t("settledInvite") : t("emptyActivity"))}</p>`;
+  wireExpenseRows($("recentList"));
+  $("seeAllBtn").hidden = sorted.length <= 4;
   $("shareSumBtn").hidden = !S.expenses.length;
 
-  // add tab: split options, keeping current choices
+  renderActivity();
+  if (sheetName === "add") renderSplit();
+}
+
+function renderActivity() {
+  const mine = me(); if (!mine) return;
+  const myName = mine.name;
+  let list = [...S.expenses].sort((a, c) => (c.createdAt || 0) - (a.createdAt || 0));
+  if (actFilter === "mine") list = list.filter(e => !e.payment && e.payer === myName);
+  if (actFilter === "repay") list = list.filter(e => e.payment);
+  if (!list.length) { $("activityList").innerHTML = `<p class="empty-state">${esc(t("emptyActivity"))}</p>`; return }
+  let html = "", last = null;
+  for (const e of list) {
+    const k = dayKey(e.createdAt);
+    if (k !== last) { html += `<div class="day">${esc(dayLabel(k))}</div>`; last = k }
+    html += expenseRow(e, myName);
+  }
+  $("activityList").innerHTML = `<div class="feed">${html}</div>`;
+  wireExpenseRows($("activityList"));
+}
+
+// Split chips inside the add form, keeping current choices
+function renderSplit() {
+  const mine = me(); if (!mine) return;
   const prevSplit = new Set([...document.querySelectorAll("#splitOpts input:checked")].map(i => i.value));
   const known = new Set([...document.querySelectorAll("#splitOpts input")].map(i => i.value));
-  $("splitOpts").innerHTML = S.people.map((p, i) => `<label><input type="checkbox" id="sp${i}" value="${esc(p)}" ${!known.has(p) || prevSplit.has(p) ? "checked" : ""}>${esc(p === myName ? p + t("youSuffix") : p)}</label>`).join("");
+  $("splitOpts").innerHTML = S.people.map((p, i) => `<label class="sp"><input type="checkbox" id="sp${i}" value="${esc(p)}" ${!known.has(p) || prevSplit.has(p) ? "checked" : ""}>${avatar(p, "xs")}${esc(p === mine.name ? t("you") : p)}</label>`).join("");
   $("splitOpts").querySelectorAll("input").forEach(i => i.onchange = preview);
   initExpCurrency();
-  preview();
+}
 
-  const n = S.expenses.length; $("expCount").textContent = n ? (n > 1 ? t("items", { n }) : t("item1")) : "";
-  $("ledger").innerHTML = n ? [...S.expenses].sort((a, c) => (c.createdAt || 0) - (a.createdAt || 0)).map(e => {
-    const each = e.split.length > 1 ? t("each", { x: fmtMinor(Math.ceil(e.cents / e.split.length)) }) : "";
-    const meta = e.payment ? t("repayment") : e.split.length === S.people.length
-      ? t("paidSplitAll", { payer: esc(e.payer), each })
-      : t("paidSplitWith", { payer: esc(e.payer), names: e.split.map(esc).join(lang === "zh-Hant" ? "、" : ", "), each });
-    const fxl = e.origCurrency && e.origCurrency !== S.currency ? `<span class="fxline num">${t("paidOrig", { amount: fmtAmount(e.origAmount, e.origCurrency), from: e.origCurrency, rate: niceRate(e.rate), to: S.currency })}</span>` : "";
-    const when = e.createdAt ? new Date(e.createdAt).toLocaleDateString(locale(), { month: "short", day: "numeric" }) : "";
-    const by = [e.addedByName ? t("addedBy", { name: esc(e.addedByName) }) : "", when].filter(Boolean).join(" · ");
-    const canDelete = !e.addedBy || e.addedBy === mine.id || admin;
-    return `<div class="exp"><span class="d">${esc(e.desc)}</span><span class="a num">${fmtMinor(e.cents)}</span><span class="meta">${meta}</span>${canDelete ? `<button class="link danger del" type="button" data-del="${esc(e.id)}">${t("del")}</button>` : "<span></span>"}${fxl}${by ? `<span class="by">${by}</span>` : ""}</div>`;
-  }).join("") : `<p class="empty">${t("noExpenses")}</p>`;
-  document.querySelectorAll("[data-del]").forEach(btn => {
-    btn.onclick = () => {
-      if (btn.dataset.armed) return act(() => api.deleteExpense(btn.dataset.del));
-      btn.dataset.armed = "1"; btn.textContent = t("tapAgainDelete");
-      setTimeout(() => { if (btn.isConnected) { delete btn.dataset.armed; btn.textContent = t("del") } }, 3000);
+// Tap an expense: details, and Delete when allowed
+function openExpense(id) {
+  openSheet("expense", el => {
+    const e = S.expenses.find(x => x.id === id), mine = me();
+    if (!e || !mine) return closeSheet();
+    const fx = e.origCurrency && e.origCurrency !== S.currency;
+    const canDelete = !e.addedBy || e.addedBy === mine.id || amAdmin();
+    const when = e.createdAt ? new Date(e.createdAt).toLocaleString(locale(), { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
+    const per = shares(e.cents, e.split);
+    el.innerHTML = `${sheetHead(e.payment ? t("repayment") : e.desc)}
+      <div style="display:flex;align-items:center;gap:12px">${catIcon(e.desc, e.payment)}<p class="detail-amt num">${fmtMinor(e.cents)}</p></div>
+      ${fx ? `<p class="hint">${esc(t("paidOrig", { amount: fmtAmount(e.origAmount, e.origCurrency), from: e.origCurrency, rate: niceRate(e.rate), to: S.currency }))}</p>` : ""}
+      <div class="list-card">
+        <div class="kv"><span>${esc(t("paidBy"))}</span><span>${esc(e.payer)}</span></div>
+        ${per.map(([p, c]) => `<div class="kv"><span>${esc(p)}</span><span class="num">${fmtMinor(c)}</span></div>`).join("")}
+        ${e.addedByName ? `<div class="kv"><span>${esc(t("addedBy", { name: "" }).trim())}</span><span>${esc(e.addedByName)}${when ? " · " + esc(when) : ""}</span></div>` : ""}
+      </div>
+      ${canDelete ? `<button class="btn ghost wide" id="expDel" type="button" style="color:var(--owe)">${esc(t("del"))}</button>` : ""}`;
+    wireClose(el);
+    if (canDelete) $("expDel").onclick = async () => {
+      if (!$("expDel").dataset.armed) { $("expDel").dataset.armed = 1; $("expDel").textContent = t("tapAgainDelete"); return }
+      closeSheet(); await act(() => api.deleteExpense(id));
     };
+  });
+}
+
+// Tap a person: what they paid, their share, and net
+function openPerson(name) {
+  openSheet("person", el => {
+    const { rows } = breakdown(), r = rows.find(x => x.name === name); if (!r) return closeSheet();
+    const mine = me();
+    el.innerHTML = `${sheetHead(name === mine?.name ? t("you") : name)}
+      <div style="display:flex;align-items:center;gap:12px">${avatar(name)}<p class="detail-amt num ${r.net > 0 ? "get-t" : r.net < 0 ? "owe-t" : ""}">${r.net === 0 ? fmtMinor(0) : (r.net > 0 ? "+" : "−") + fmtMinor(Math.abs(r.net))}</p></div>
+      <div class="list-card">
+        <div class="kv"><span>${esc(t("colPaid"))}</span><span class="num">${fmtMinor(r.paid)}</span></div>
+        <div class="kv"><span>${esc(t("colShare"))}</span><span class="num">${fmtMinor(r.share)}</span></div>
+        <div class="kv"><span>${esc(t("colNet"))}</span><span class="num">${r.net === 0 ? fmtMinor(0) : (r.net > 0 ? "+" : "−") + fmtMinor(Math.abs(r.net))}</span></div>
+      </div>
+      <button class="btn ghost wide" id="toPeople" type="button">${esc(t("peopleAdmins"))}</button>`;
+    wireClose(el);
+    $("toPeople").onclick = openPeople;
   });
 }
 
@@ -881,6 +1030,7 @@ function initExpCurrency() {
 }
 function refreshFxLabels() {
   const c = $("expCurrency").value;
+  $("curChipText").textContent = c;
   $("fxBox").hidden = c === S.currency;
   $("fxFrom").textContent = `1 ${c} =`;
   $("fxTo").textContent = S.currency;
@@ -924,10 +1074,10 @@ const checked = () => [...document.querySelectorAll("#splitOpts input:checked")]
 function preview() {
   if (!S.id) return;
   const c = $("expCurrency").value, amt = parseAmount(), cents = homeCents(), s = checked();
+  $("convLine").textContent = c !== S.currency && cents ? "= " + fmtMinor(cents) : "";
   if (!amt) return $("preview").textContent = "";
   if (!cents) return $("preview").textContent = t("enterRate");
-  const conv = c !== S.currency ? `${fmtAmount(amt, c)} = ${fmtMinor(cents)}` : fmtMinor(cents);
-  $("preview").textContent = s.length ? t("previewEach", { conv, n: s.length, x: fmtMinor(Math.round(cents / s.length)) }) : conv;
+  $("preview").textContent = s.length ? t("eachX", { x: fmtMinor(Math.round(cents / s.length)), n: s.length }) : "";
 }
 $("amount").oninput = preview;
 $("selAll").onclick = () => { document.querySelectorAll("#splitOpts input").forEach(i => i.checked = true); preview() };
@@ -942,9 +1092,10 @@ $("expForm").addEventListener("submit", e => {
   if (!split.length) return err.textContent = t("errSplit");
   const entry = { desc, cents, payer: me().name, split };
   if (c !== S.currency) Object.assign(entry, { origAmount: amt, origCurrency: c, rate: fx.rate });
-  err.textContent = ""; $("desc").value = ""; $("amount").value = ""; preview();
+  err.textContent = ""; $("desc").value = ""; $("amount").value = ""; preview(); updateDescIcon();
   document.activeElement?.blur();
   act(() => api.addExpense(entry));
+  closeSheet(); tab = "home"; show("group"); window.scrollTo({ top: 0 });
   toast(t("addedToast"));
 });
 
@@ -954,6 +1105,7 @@ function applyLanguage() {
   fillAllCurrencySelects();
   $("langSel").value = lang;
   $("inviteBtn").setAttribute("aria-label", t("copyInviteRow"));
+  $("plusBtn").setAttribute("aria-label", t("addExpenseTitle"));
   $("menuBtn").setAttribute("aria-label", t("groupSettings"));
   if (S.id && me() && !forceJoin) render();
   else if (S.id && S.loaded.people) renderJoin();
