@@ -120,3 +120,20 @@ footer{display:flex;gap:10px;flex-wrap:wrap;align-items:center;color:var(--muted
 .exp .fxline{color:var(--muted);font-size:.8rem;grid-column:1/-1}
 .chip .tagtxt{color:var(--muted);font-weight:400;font-size:.85em;margin-left:-2px}
 .chip.fixed{padding-right:12px}
+.account .acct-actions{display:flex;flex-wrap:wrap;gap:8px}
+.account #acctOut,.account #acctIn{display:flex;flex-direction:column;gap:10px}
+.account #acctOut[hidden],.account #acctIn[hidden]{display:none!important}
+.acct-line{margin:0}
+.badge{display:inline-block;margin-left:6px;font-size:.7rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--accent);background:var(--accent-soft);border-radius:999px;padding:1px 8px;vertical-align:1px}
+.chip.selectable{cursor:pointer}
+.chip.selected{border-color:var(--accent);background:var(--accent-soft)}
+.admin-panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:10px}
+.admin-panel .row-actions{display:flex;flex-wrap:wrap;gap:8px}
+.admin-panel .inline input{max-width:14rem}
+/* stop zooming: iOS zooms into inputs under 16px, and double-tap zooms by default */
+html{touch-action:manipulation}
+input,select,textarea{font-size:16px}
+header{align-items:flex-start}
+.lang{width:auto;font-size:14px;padding:6px 8px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--fg)}
+:lang(zh-Hant) body,:lang(zh-Hant) input,:lang(zh-Hant) select,:lang(zh-Hant) button{font-family:"Figtree","Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif}
+:lang(zh-Hant) h2,:lang(zh-Hant) .group-name{font-family:"Bricolage Grotesque","Noto Sans TC","PingFang TC",system-ui,sans-serif}

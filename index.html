@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>Settle Up</title>
 <meta name="description" content="Split shared expenses with friends and see who owes whom.">
 <meta name="theme-color" content="#1f6f5c">
@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Settle Up">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Figtree:wght@400;500;600&family=JetBrains+Mono:wght@500;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Figtree:wght@400;500;600&family=JetBrains+Mono:wght@500;700&family=Noto+Sans+TC:wght@400;500;700&display=swap">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -20,49 +20,87 @@
   <header>
     <div>
       <h1>Settle<span>Up</span></h1>
-      <p class="sub">Log who paid for what. See who owes whom.</p>
+      <p class="sub" data-i18n="tagline">Log who paid for what. See who owes whom.</p>
     </div>
+    <select id="langSel" class="lang" aria-label="Language">
+      <option value="en">English</option>
+      <option value="zh-Hant">繁體中文</option>
+    </select>
   </header>
 
   <div class="banner" id="statusBanner" hidden><span id="statusText"></span></div>
 
   <!-- Start screen: create or reopen a group -->
   <section id="startView" hidden>
-    <form class="card" id="createForm" novalidate>
-      <h2>Start a group</h2>
-      <label>Group name<input id="groupName" placeholder="Bali trip, Flat 4B, Friday dinners…" maxlength="60" autocomplete="off"></label>
-      <label>Your name<input id="founderName" placeholder="e.g. Alex" maxlength="24" autocomplete="off"></label>
-      <label>Home currency
-        <select id="newCurrency" class="currency-select"></select>
-      </label>
-      <p class="hint">Balances are settled in this currency. You can still log expenses in any currency on a trip.</p>
-      <p class="err" id="createErr"></p>
-      <button class="btn primary" type="submit">Create group</button>
-      <p class="hint">You'll get a link to send your friends. Anyone with the link can join and add expenses.</p>
-    </form>
     <div class="card" id="recentCard" hidden>
-      <h2>Your groups</h2>
+      <h2 data-i18n="yourGroups">Your groups</h2>
       <div class="recent" id="recent"></div>
     </div>
+
+    <div class="card account" id="accountCard">
+      <div id="acctOut">
+        <h2 data-i18n="keepGroups">Keep your groups</h2>
+        <p class="hint" data-i18n="keepGroupsHint">Optional. Sign in so your groups come back on any phone or browser. No password needed.</p>
+        <div class="acct-actions">
+          <button class="btn ghost" id="googleBtn" type="button" data-i18n="google">Continue with Google</button>
+          <button class="btn ghost" id="emailToggle" type="button" data-i18n="emailMe">Email me a sign-in link</button>
+        </div>
+        <form id="emailForm" class="inline" hidden novalidate>
+          <input id="emailInput" type="email" inputmode="email" autocomplete="email" placeholder="you@example.com">
+          <button class="btn primary" type="submit" data-i18n="sendLink">Send link</button>
+        </form>
+        <div id="emailSent" hidden>
+          <p class="hint" id="emailSentText"></p>
+          <label><span data-i18n="pasteHint">Using the home-screen app? Copy the link from the email and paste it here</span>
+            <span class="inline"><input id="pasteLink" data-i18n-ph="pastePh" placeholder="Paste sign-in link" autocomplete="off"><button class="btn primary" id="pasteBtn" type="button" data-i18n="signIn">Sign in</button></span>
+          </label>
+        </div>
+      </div>
+      <div id="acctIn" hidden>
+        <p class="acct-line"><span data-i18n="signedInAs">Signed in as</span> <strong id="acctEmail"></strong></p>
+        <p class="hint" data-i18n="savedToAccount">Your groups are saved to this account.</p>
+        <button class="link" id="signOutBtn" type="button" data-i18n="signOut">Sign out</button>
+      </div>
+      <p class="err" id="acctErr"></p>
+    </div>
+
+    <form class="card" id="finishForm" hidden novalidate>
+      <h2 data-i18n="finishSignIn">Finish signing in</h2>
+      <p class="hint" data-i18n="finishHint">Type the email address you asked the sign-in link for.</p>
+      <span class="inline"><input id="finishEmail" type="email" inputmode="email" autocomplete="email" placeholder="you@example.com"><button class="btn primary" type="submit" data-i18n="signIn">Sign in</button></span>
+    </form>
+
+    <form class="card" id="createForm" novalidate>
+      <h2 data-i18n="startGroup">Start a group</h2>
+      <label><span data-i18n="groupName">Group name</span><input id="groupName" data-i18n-ph="groupNamePh" placeholder="Bali trip, Flat 4B, Friday dinners…" maxlength="60" autocomplete="off"></label>
+      <label><span data-i18n="yourName">Your name</span><input id="founderName" data-i18n-ph="yourNamePh" placeholder="e.g. Alex" maxlength="24" autocomplete="off"></label>
+      <label><span data-i18n="homeCurrency">Home currency</span>
+        <select id="newCurrency" class="currency-select"></select>
+      </label>
+      <p class="hint" data-i18n="homeCurrencyHint">Balances are settled in this currency. You can still log expenses in any currency on a trip.</p>
+      <p class="err" id="createErr"></p>
+      <button class="btn primary" type="submit" data-i18n="createGroup">Create group</button>
+      <p class="hint" data-i18n="createHint">You'll get a link to send your friends. Anyone with the link can join and add expenses.</p>
+    </form>
   </section>
 
   <!-- Join screen: first visit to a group on this device -->
   <section id="joinView" hidden>
     <div class="card">
-      <span class="eyebrow">Join group</span>
+      <span class="eyebrow" data-i18n="joinGroup">Join group</span>
       <h2 id="joinGroupName"></h2>
-      <p class="hint">Which one are you? You only do this once on each device.</p>
+      <p class="hint" data-i18n="whichOne">Which one are you? You only do this once on each device.</p>
       <div class="join-list" id="joinList"></div>
       <div class="join-new">
-        <label>Not on the list? Add yourself
+        <label><span data-i18n="notOnList">Not on the list? Add yourself</span>
           <span class="inline">
-            <input id="joinName" placeholder="Your name" maxlength="24" autocomplete="off">
-            <button class="btn primary" id="joinNewBtn" type="button">Join</button>
+            <input id="joinName" data-i18n-ph="yourNameShort" placeholder="Your name" maxlength="24" autocomplete="off">
+            <button class="btn primary" id="joinNewBtn" type="button" data-i18n="join">Join</button>
           </span>
         </label>
       </div>
       <p class="err" id="joinErr"></p>
-      <a class="link" href="#" id="joinBack" hidden>Cancel</a>
+      <a class="link" href="#" id="joinBack" hidden data-i18n="cancel">Cancel</a>
     </div>
   </section>
 
@@ -71,32 +109,33 @@
     <section>
       <div class="group-bar">
         <span class="group-name" id="gName"></span>
-        <button class="btn small ghost" id="shareBtn" type="button">Copy invite link</button>
-        <a class="link" href="#" id="homeLink">All groups</a>
+        <button class="btn small ghost" id="shareBtn" type="button" data-i18n="copyInvite">Copy invite link</button>
+        <a class="link" href="#" id="homeLink" data-i18n="allGroups">All groups</a>
       </div>
-      <p class="me">You're <strong id="meName"></strong> · <button class="link" id="notMe" type="button">Not you?</button></p>
+      <p class="me"><span data-i18n="youAre">You're</span> <strong id="meName"></strong><span id="adminTag" class="badge" hidden data-i18n="admin">admin</span> · <button class="link" id="notMe" type="button" data-i18n="notYou">Not you?</button></p>
+      <p class="me" id="saveNudge" hidden><button class="link" id="saveGroupsBtn" type="button" data-i18n="saveNudge">Sign in to keep your groups on any device</button></p>
     </section>
 
     <section aria-labelledby="h-settle">
-      <div class="sec-head"><h2 id="h-settle">Who pays whom</h2><span class="eyebrow" id="txCount"></span></div>
+      <div class="sec-head"><h2 id="h-settle" data-i18n="whoPays">Who pays whom</h2><span class="eyebrow" id="txCount"></span></div>
       <div class="transfers" id="transfers"></div>
     </section>
 
     <section aria-labelledby="h-bal">
-      <div class="sec-head"><h2 id="h-bal">Balances</h2><span class="eyebrow num" id="total"></span></div>
+      <div class="sec-head"><h2 id="h-bal" data-i18n="balances">Balances</h2><span class="eyebrow num" id="total"></span></div>
       <div class="bal" id="balances"></div>
     </section>
 
     <section aria-labelledby="h-add">
-      <h2 id="h-add">Add what you paid</h2>
+      <h2 id="h-add" data-i18n="addPaid">Add what you paid</h2>
       <form id="expForm" novalidate>
-        <label>What was it for<input id="desc" placeholder="Dinner, taxi, groceries…" maxlength="60" autocomplete="off"></label>
+        <label><span data-i18n="whatFor">What was it for</span><input id="desc" data-i18n-ph="whatForPh" placeholder="Dinner, taxi, groceries…" maxlength="60" autocomplete="off"></label>
         <div class="amount-row">
-          <label>Amount<input id="amount" inputmode="decimal" placeholder="0.00" autocomplete="off"></label>
-          <label>Currency<select id="expCurrency" class="currency-select"></select></label>
+          <label><span data-i18n="amount">Amount</span><input id="amount" inputmode="decimal" placeholder="0.00" autocomplete="off"></label>
+          <label><span data-i18n="currency">Currency</span><select id="expCurrency" class="currency-select"></select></label>
         </div>
         <div class="fx" id="fxBox" hidden>
-          <label class="fx-rate">Exchange rate
+          <label class="fx-rate"><span data-i18n="exchangeRate">Exchange rate</span>
             <span class="inline fx-inline">
               <span class="num" id="fxFrom">1 JPY =</span>
               <input id="fxRate" inputmode="decimal" autocomplete="off">
@@ -106,37 +145,39 @@
           <p class="hint" id="fxNote"></p>
         </div>
         <fieldset>
-          <legend><span>Split between</span><span><button type="button" class="link" id="selAll">All</button> · <button type="button" class="link" id="selNone">None</button></span></legend>
+          <legend><span data-i18n="splitBetween">Split between</span><span><button type="button" class="link" id="selAll" data-i18n="all">All</button> · <button type="button" class="link" id="selNone" data-i18n="none">None</button></span></legend>
           <div class="split-opts" id="splitOpts"></div>
         </fieldset>
         <p class="preview num" id="preview"></p>
         <p class="err" id="expErr"></p>
-        <button class="btn primary" type="submit" id="expSubmit">Add expense</button>
+        <button class="btn primary" type="submit" id="expSubmit" data-i18n="addExpense">Add expense</button>
       </form>
     </section>
 
     <section aria-labelledby="h-ledger">
-      <div class="sec-head"><h2 id="h-ledger">Expenses</h2><span class="eyebrow" id="expCount"></span></div>
+      <div class="sec-head"><h2 id="h-ledger" data-i18n="expenses">Expenses</h2><span class="eyebrow" id="expCount"></span></div>
       <div class="ledger" id="ledger"></div>
     </section>
 
     <section aria-labelledby="h-people">
-      <h2 id="h-people">People</h2>
+      <h2 id="h-people" data-i18n="people">People</h2>
       <div class="chips" id="people"></div>
-      <p class="hint">Friends join themselves from the invite link. You can also add someone now and they'll pick their name when they join.</p>
+      <div class="admin-panel" id="adminPanel" hidden></div>
+      <p class="hint" id="peopleHint"></p>
       <div class="inline">
-        <input id="newPerson" placeholder="Add a friend's name" maxlength="24" autocomplete="off">
-        <button class="btn primary" id="addPerson" type="button">Add</button>
+        <input id="newPerson" data-i18n-ph="addFriendPh" placeholder="Add a friend's name" maxlength="24" autocomplete="off">
+        <button class="btn primary" id="addPerson" type="button" data-i18n="add">Add</button>
       </div>
       <p class="err" id="personErr"></p>
     </section>
 
     <footer>
-      <label class="home-cur">Home currency
+      <label class="home-cur"><span data-i18n="homeCurrency">Home currency</span>
         <select id="currency" class="currency-select"></select>
       </label>
       <span id="curNote"></span>
-      <span>Syncs live for everyone with the link.</span>
+      <span id="renameWrap" hidden><button class="link" id="renameBtn" type="button" data-i18n="rename">Rename group</button></span>
+      <span data-i18n="syncs">Syncs live for everyone with the link.</span>
     </footer>
   </div>
 </div>

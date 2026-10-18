@@ -20,6 +20,16 @@ Setup takes about 15 minutes, once.
 6. Click the gear icon → **Project settings** → scroll to **Your apps** → click the **`</>`** (Web) icon → name it `settle-up` → **Register app**. Leave "Firebase Hosting" unticked.
 7. Firebase shows a `firebaseConfig = { ... }` block. Copy those values into `firebase-config.js`, replacing each `PASTE_...` value.
 
+### Optional sign-in (Google and email link)
+
+So people can get their groups back on any device:
+
+1. **Authentication → Sign-in method → Add new provider → Google** → **Enable**, choose a support email → **Save**.
+2. **Add new provider → Email/Password** → turn on **Email link (passwordless sign-in)**. You can leave the plain Email/Password switch off. Click **Save**.
+3. Make sure your site is in **Authentication → Settings → Authorized domains** (step 3 below). Both sign-in methods need it.
+
+Signing in is optional. Anyone can still join a group straight from the invite link.
+
 ## 2. Put it on GitHub Pages
 
 1. On https://github.com, click **New repository** → name it `settle-up` → **Public** → **Create repository**.
@@ -40,6 +50,22 @@ Firebase → **Authentication → Settings → Authorized domains → Add domain
 5. **Who pays whom** always shows the fewest payments to even everyone out. Tap **Mark as paid** once someone pays back.
 
 **Add to home screen:** on iPhone, open the link in Safari → Share → **Add to Home Screen**. On Android, open it in Chrome → menu → **Install app**.
+
+## Accounts
+
+Without an account, each phone remembers its own groups. If someone gets a new phone or clears their browser, they need the invite link again.
+
+With an account (Google or an email link, no password), the start screen lists all your groups on any device, and you're recognized automatically in each one. Signing in on a phone that already has groups moves those groups to your account.
+
+On iPhone, an email link opens in Safari. If you're using the home-screen app, copy the link from the email and paste it into the box on the app's start screen instead.
+
+## Admins
+
+Whoever creates a group is its admin. Admins can tap any name under **People** to make someone else an admin, unlink a name from a device (so that person can pick it again), or remove someone who isn't on any expenses. Admins can also delete any expense, rename the group, and set the home currency before the first expense. Groups created before this update don't have an admin, so start a new group to get one.
+
+## Languages
+
+The app comes in English and Traditional Chinese (繁體中文). It picks the phone's language automatically, and anyone can switch with the picker at the top right. To add another language, copy the `en` block in `i18n.js`, translate the values, and add it to the picker in `index.html`.
 
 ## Trips abroad
 
@@ -63,6 +89,7 @@ The home currency can only be changed before the first expense is added.
 | `index.html` | The page layout |
 | `style.css` | Colors, fonts, light and dark mode |
 | `app.js` | Groups, expenses, balances and the settle-up math |
+| `i18n.js` | All text in English and Traditional Chinese |
 | `firebase-config.js` | Your Firebase project settings (you fill this in) |
 | `firestore.rules` | Database security rules (paste into Firebase) |
 | `manifest.webmanifest`, `sw.js`, `icons/` | Make it installable and quick to open |
