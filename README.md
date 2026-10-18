@@ -16,7 +16,7 @@ Setup takes about 15 minutes, once.
 3. In the left menu: **Build → Authentication → Get started → Sign-in method → Anonymous → Enable → Save**.
    (This gives each phone a hidden ID so the database can block random bots. Your friends never see a login.)
 4. Left menu: **Build → Firestore Database → Create database** → pick a location near you → **Start in production mode** → **Create**.
-5. In Firestore, open the **Rules** tab, delete what's there, paste everything from `firestore.rules`, and click **Publish**.
+5. In Firestore, open the **Rules** tab (repeat this whenever `firestore.rules` changes), delete what's there, paste everything from `firestore.rules`, and click **Publish**.
 6. Click the gear icon → **Project settings** → scroll to **Your apps** → click the **`</>`** (Web) icon → name it `settle-up` → **Register app**. Leave "Firebase Hosting" unticked.
 7. Firebase shows a `firebaseConfig = { ... }` block. Copy those values into `firebase-config.js`, replacing each `PASTE_...` value.
 
@@ -35,14 +35,22 @@ Firebase → **Authentication → Settings → Authorized domains → Add domain
 
 1. Open your app link, enter a group name and your name, then **Create group**.
 2. Tap **Copy invite link** and send it to your friends in your group chat.
-3. Each friend opens the link and picks their name under **You are**. If they're not listed, they add themselves under **People**.
-4. Whoever pays for something adds it: what it was, the amount, who paid, and who it's split between.
+3. Each friend opens the link and taps their name, or adds themselves if they're not listed. This happens once per device, and from then on the app knows who they are.
+4. Whoever pays for something adds it from their own phone: what it was, the amount, the currency and who it's split between. Expenses are always recorded as paid by the person adding them.
 5. **Who pays whom** always shows the fewest payments to even everyone out. Tap **Mark as paid** once someone pays back.
 
 **Add to home screen:** on iPhone, open the link in Safari → Share → **Add to Home Screen**. On Android, open it in Chrome → menu → **Install app**.
 
+## Trips abroad
+
+Each group has a home currency, and all balances are settled in it. When you add an expense, pick the currency you actually paid in. The app fills in today's exchange rate and converts the amount back to the home currency. You can change the rate to match what your card or money changer actually gave you. Rates come from open.er-api.com (free, no key needed).
+
+The home currency can only be changed before the first expense is added.
+
 ## Good to know
 
+- Each device joins as one person. On iPhone, the home-screen app and Safari count as separate devices, so after adding it to the home screen you'll pick your name once more. Your name will show "joined on another device." Tap it twice to move it to this device.
+- You can only delete expenses you added yourself.
 - The group link works like a key. Anyone who has it can add or delete expenses, so only share it with the group.
 - Firebase's free plan covers far more than a friend group will use (50,000 reads and 20,000 writes a day).
 - To change the app later, edit the files and upload them to the repo again. Phones pick up the new version the next time they open it.

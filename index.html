@@ -31,19 +31,14 @@
     <form class="card" id="createForm" novalidate>
       <h2>Start a group</h2>
       <label>Group name<input id="groupName" placeholder="Bali trip, Flat 4B, Friday dinners…" maxlength="60" autocomplete="off"></label>
-      <div class="row">
-        <label>Your name<input id="founderName" placeholder="Tobby" maxlength="24" autocomplete="off"></label>
-        <label>Currency
-          <select id="newCurrency">
-            <option value="USD">$ USD</option><option value="EUR">€ EUR</option><option value="GBP">£ GBP</option>
-            <option value="JPY">¥ JPY</option><option value="PHP">₱ PHP</option><option value="AUD">A$ AUD</option>
-            <option value="CAD">C$ CAD</option><option value="SGD">S$ SGD</option>
-          </select>
-        </label>
-      </div>
+      <label>Your name<input id="founderName" placeholder="e.g. Alex" maxlength="24" autocomplete="off"></label>
+      <label>Home currency
+        <select id="newCurrency" class="currency-select"></select>
+      </label>
+      <p class="hint">Balances are settled in this currency. You can still log expenses in any currency on a trip.</p>
       <p class="err" id="createErr"></p>
       <button class="btn primary" type="submit">Create group</button>
-      <p class="preview">You'll get a link to send your friends. Anyone with the link can view and add expenses.</p>
+      <p class="hint">You'll get a link to send your friends. Anyone with the link can join and add expenses.</p>
     </form>
     <div class="card" id="recentCard" hidden>
       <h2>Your groups</h2>
@@ -51,17 +46,35 @@
     </div>
   </section>
 
+  <!-- Join screen: first visit to a group on this device -->
+  <section id="joinView" hidden>
+    <div class="card">
+      <span class="eyebrow">Join group</span>
+      <h2 id="joinGroupName"></h2>
+      <p class="hint">Which one are you? You only do this once on each device.</p>
+      <div class="join-list" id="joinList"></div>
+      <div class="join-new">
+        <label>Not on the list? Add yourself
+          <span class="inline">
+            <input id="joinName" placeholder="Your name" maxlength="24" autocomplete="off">
+            <button class="btn primary" id="joinNewBtn" type="button">Join</button>
+          </span>
+        </label>
+      </div>
+      <p class="err" id="joinErr"></p>
+      <a class="link" href="#" id="joinBack" hidden>Cancel</a>
+    </div>
+  </section>
+
   <!-- Group screen -->
-  <div id="groupView" hidden style="display:contents">
+  <div id="groupView" hidden>
     <section>
       <div class="group-bar">
         <span class="group-name" id="gName"></span>
         <button class="btn small ghost" id="shareBtn" type="button">Copy invite link</button>
         <a class="link" href="#" id="homeLink">All groups</a>
       </div>
-      <div class="me">You are
-        <select id="meSel" aria-label="Who are you"></select>
-      </div>
+      <p class="me">You're <strong id="meName"></strong> · <button class="link" id="notMe" type="button">Not you?</button></p>
     </section>
 
     <section aria-labelledby="h-settle">
@@ -75,20 +88,30 @@
     </section>
 
     <section aria-labelledby="h-add">
-      <h2 id="h-add">Add an expense</h2>
+      <h2 id="h-add">Add what you paid</h2>
       <form id="expForm" novalidate>
-        <div class="row">
-          <label>What was it for<input id="desc" placeholder="Dinner, Uber, groceries…" maxlength="60" autocomplete="off"></label>
+        <label>What was it for<input id="desc" placeholder="Dinner, taxi, groceries…" maxlength="60" autocomplete="off"></label>
+        <div class="amount-row">
           <label>Amount<input id="amount" inputmode="decimal" placeholder="0.00" autocomplete="off"></label>
+          <label>Currency<select id="expCurrency" class="currency-select"></select></label>
         </div>
-        <label>Paid by<select id="payer"></select></label>
+        <div class="fx" id="fxBox" hidden>
+          <label class="fx-rate">Exchange rate
+            <span class="inline fx-inline">
+              <span class="num" id="fxFrom">1 JPY =</span>
+              <input id="fxRate" inputmode="decimal" autocomplete="off">
+              <span class="num" id="fxTo">USD</span>
+            </span>
+          </label>
+          <p class="hint" id="fxNote"></p>
+        </div>
         <fieldset>
           <legend><span>Split between</span><span><button type="button" class="link" id="selAll">All</button> · <button type="button" class="link" id="selNone">None</button></span></legend>
           <div class="split-opts" id="splitOpts"></div>
         </fieldset>
         <p class="preview num" id="preview"></p>
         <p class="err" id="expErr"></p>
-        <button class="btn primary" type="submit">Add expense</button>
+        <button class="btn primary" type="submit" id="expSubmit">Add expense</button>
       </form>
     </section>
 
@@ -100,6 +123,7 @@
     <section aria-labelledby="h-people">
       <h2 id="h-people">People</h2>
       <div class="chips" id="people"></div>
+      <p class="hint">Friends join themselves from the invite link. You can also add someone now and they'll pick their name when they join.</p>
       <div class="inline">
         <input id="newPerson" placeholder="Add a friend's name" maxlength="24" autocomplete="off">
         <button class="btn primary" id="addPerson" type="button">Add</button>
@@ -108,13 +132,10 @@
     </section>
 
     <footer>
-      <label style="flex-direction:row;align-items:center;gap:8px">Currency
-        <select id="currency" style="width:auto">
-          <option value="USD">$ USD</option><option value="EUR">€ EUR</option><option value="GBP">£ GBP</option>
-          <option value="JPY">¥ JPY</option><option value="PHP">₱ PHP</option><option value="AUD">A$ AUD</option>
-          <option value="CAD">C$ CAD</option><option value="SGD">S$ SGD</option>
-        </select>
+      <label class="home-cur">Home currency
+        <select id="currency" class="currency-select"></select>
       </label>
+      <span id="curNote"></span>
       <span>Syncs live for everyone with the link.</span>
     </footer>
   </div>
