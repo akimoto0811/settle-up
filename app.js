@@ -5,7 +5,7 @@ import {
   sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, signOut
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
-  getFirestore, doc, collection, setDoc, addDoc, deleteDoc, updateDoc, getDoc, getDocs, onSnapshot,
+  getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, collection, setDoc, addDoc, deleteDoc, updateDoc, getDoc, getDocs, onSnapshot,
   serverTimestamp, writeBatch
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js";
@@ -132,7 +132,15 @@ async function act(fn) {
   try { const r = await fn(); status(""); return r ?? true }
   catch (e) { console.error(e); status(t("saveFail"), true); return false }
 }
+let loadingT;
+function showLoading() {
+  clearTimeout(loadingT);
+  // Only show the spinner if loading takes a moment, so cached groups open without a flash
+  loadingT = setTimeout(() => { if (S.id && !S.loaded.people) show("loading") }, 150);
+}
 function show(view) {
+  if (view !== "loading") clearTimeout(loadingT);
+  $("loadingView").hidden = view !== "loading";
   const inGroup = view === "group";
   $("barStart").hidden = inGroup; $("barGroup").hidden = !inGroup;
   $("startView").hidden = view !== "start";
@@ -346,40 +354,48 @@ $("createForm").addEventListener("submit", async e => {
     b.set(pref, { name: founder, uid, role: "admin", createdAt: Date.now() });
     b.set(doc(gref, "members", uid), { personId: pref.id });
     b.set(doc(userGroupsCol(uid), gref.id), { name, personId: pref.id, openedAt: Date.now() });
-    await b.commit();
+    // Don't wait for the server: the new group shows straight away from the phone's copy, and the save finishes in the background
+    b.commit().catch(e3 => { console.error(e3); forgetGroup(gref.id); goHome(); status(t("createFail"), true) });
     $("groupName").value = ""; $("founderName").value = ""; $("createForm").hidden = true;
     tab = "add";
     location.hash = gref.id;
-    setTimeout(() => toast(t("createdToast")), 400);
+    setTimeout(() => toast(t("createdToast")), 300);
   } catch (e2) { console.error(e2); err.textContent = t("createFail") }
 });
 
 // ---------- open group (live) ----------
 async function openGroup(gid) {
   S = blankGroup(gid);
+  S.loaded.group = false;
+  showLoading();
   const gref = doc(db, "groups", gid);
-  try {
-    const snap = await getDoc(gref);
-    if (!snap.exists()) { forgetGroup(gid); goHome(); status(t("badLink"), true); return }
-  } catch (e) { status(t("loadFail"), true); return }
-  if (S.id !== gid) return;
   const onErr = e => { console.error(e); if (S.id === gid) status(t("offline"), true) };
-  unsubs.push(onSnapshot(gref, s => {
-    if (!s.exists()) { if (S.id === gid) { forgetGroup(gid); goHome(); toast(t("deletedToast")) } return }
+  const fromCache = s => !!(s.metadata && s.metadata.fromCache);
+  // Snapshots come from the phone's cache first (instant), then from the server
+  unsubs.push(onSnapshot(gref, { includeMetadataChanges: false }, s => {
+    if (S.id !== gid) return;
+    if (!s.exists()) {
+      if (fromCache(s)) return;                       // not cached yet: wait for the server
+      forgetGroup(gid); goHome();
+      if (S.loaded.group) toast(t("deletedToast")); else status(t("badLink"), true);
+      return;
+    }
+    S.loaded.group = true;
     const d = s.data() || {}; S.name = d.name || t("groupFallback"); S.currency = d.currency || "USD"; S.legacy = !d.createdBy; S.hasAdminFlag = !!d.hasAdmin;
     document.title = S.name + " · Settle Up"; rememberGroup(); update();
   }, onErr));
-  unsubs.push(onSnapshot(collection(gref, "people"), s => {
+  unsubs.push(onSnapshot(collection(gref, "people"), { includeMetadataChanges: false }, s => {
+    if (s.empty && fromCache(s)) return;              // nothing cached yet: wait for the server
     S.peopleDocs = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
     S.people = S.peopleDocs.map(p => p.name); S.loaded.people = true; update();
   }, onErr));
-  unsubs.push(onSnapshot(collection(gref, "expenses"), s => {
+  unsubs.push(onSnapshot(collection(gref, "expenses"), { includeMetadataChanges: false }, s => {
     S.expenses = s.docs.map(d => ({ id: d.id, ...d.data() })); update();
   }, onErr));
 }
 
 function update() {
-  if (!S.id || !S.loaded.people || migrating || deleting) return;
+  if (!S.id || !S.loaded.people || S.loaded.group === false || migrating || deleting) return;
   const m = me();
   if (!m || forceJoin) { renderJoin(); show("join") }
   else { show("group"); render(); indexGroup(m.id) }
@@ -949,7 +965,9 @@ applyLanguage();
 // ---------- boot ----------
 async function boot() {
   const app = initializeApp(firebaseConfig);
-  db = getFirestore(app);
+  // Keep a copy of groups on the phone so they open instantly and work offline
+  try { db = initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) }) }
+  catch (e) { console.warn("cache off", e); db = getFirestore(app) }
   auth = getAuth(app);
   await auth.authStateReady();
   if (!auth.currentUser) {
@@ -977,6 +995,36 @@ async function boot() {
 if (!firebaseConfig || !firebaseConfig.apiKey || firebaseConfig.apiKey.startsWith("PASTE")) {
   status(t("setupNeeded"), true);
 } else boot();
+
+// ---------- pull to refresh (home-screen app only; browsers have their own) ----------
+const standalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+if (standalone) {
+  const ptr = $("ptr"), TRIGGER = 60;
+  let startY = null, dist = 0, busy = false;
+  const canStart = () => window.scrollY <= 0 && !sheetName && !busy;
+  window.addEventListener("touchstart", e => { startY = canStart() && e.touches.length === 1 ? e.touches[0].clientY : null; dist = 0 }, { passive: true });
+  window.addEventListener("touchmove", e => {
+    if (startY === null) return;
+    dist = Math.max(0, e.touches[0].clientY - startY);
+    if (dist <= 0 || window.scrollY > 0) { ptr.hidden = true; return }
+    const d = Math.min(dist * 0.5, 90);
+    ptr.hidden = false;
+    ptr.style.transform = `translate(-50%, ${d}px)`;
+    ptr.style.transition = "none";
+    ptr.classList.toggle("ready", d >= TRIGGER);
+    ptr.querySelector("svg").style.transform = `rotate(${d * 4}deg)`;
+  }, { passive: true });
+  window.addEventListener("touchend", () => {
+    if (startY === null) return;
+    startY = null;
+    ptr.style.transition = "";
+    if (ptr.classList.contains("ready")) {
+      busy = true; ptr.classList.add("spin");
+      ptr.style.transform = `translate(-50%, 56px)`;
+      setTimeout(() => location.reload(), 250);
+    } else { ptr.style.transform = "translate(-50%, 0)"; setTimeout(() => { if (!busy) ptr.hidden = true }, 200) }
+  });
+}
 
 // Block pinch-zoom on iOS Safari, which ignores user-scalable=no
 document.addEventListener("gesturestart", e => e.preventDefault(), { passive: false });

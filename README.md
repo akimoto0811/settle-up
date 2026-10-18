@@ -79,6 +79,9 @@ The home currency can only be changed before the first expense is added.
 
 ## Good to know
 
+- In the home-screen app, pull down at the top of the screen to refresh. Changes from friends appear on their own anyway; refreshing is for reconnecting after being offline or picking up a new app version.
+- Groups you've opened are kept on your phone, so they open instantly and you can look at them offline.
+
 - Each device joins as one person. On iPhone, the home-screen app and Safari count as separate devices, so after adding it to the home screen you'll pick your name once more. Your name will show "joined on another device." Tap it twice to move it to this device.
 - You can only delete expenses you added yourself.
 - The group link works like a key. Anyone who has it can add or delete expenses, so only share it with the group.

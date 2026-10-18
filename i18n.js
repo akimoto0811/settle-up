@@ -80,7 +80,7 @@ const dict = {
     errGroupName: "Give the group a name.",
     errFounder: "Add your name so friends know who started it.",
     createFail: "Couldn't create the group. Check your connection and that the latest firestore.rules are published.",
-    createdToast: "Group created. Tap “Copy invite link” to share it.",
+    createdToast: "Group created. Tap the invite icon at the top to share it.",
     tagYou: "you",
     tagConfirm: "Tap again if this is really you",
     tagOther: "joined on another device",
@@ -222,6 +222,7 @@ const dict = {
     netNote: "Net includes repayments already made.",
     moreRows: "+{n} more",
     madeWith: "Made with Settle Up",
+    loading: "Loading…",
     fxStar: "* Paid in another currency, converted at the rate logged.",
   },
 
@@ -303,7 +304,7 @@ const dict = {
     errGroupName: "請為群組命名。",
     errFounder: "請輸入你的名字，讓朋友知道是誰建立的。",
     createFail: "無法建立群組。請檢查網絡，並確認已發佈最新的 firestore.rules。",
-    createdToast: "群組已建立。點「複製邀請連結」分享給朋友。",
+    createdToast: "群組已建立。點上方的邀請圖示分享給朋友。",
     tagYou: "你",
     tagConfirm: "如果真的是你，請再點一次",
     tagOther: "已在其他裝置加入",
@@ -444,6 +445,7 @@ const dict = {
     netNote: "淨額已計入已還款項。",
     moreRows: "另有 {n} 項",
     madeWith: "由 Settle Up 製作",
+    loading: "載入中…",
     fxStar: "* 以外幣支付，已按記錄的匯率換算。",
   },
 };
