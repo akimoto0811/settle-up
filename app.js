@@ -45,12 +45,13 @@ let S = blankGroup(null);
 let unsubs = [];
 let db, auth, uid = null, account = null;
 let forceJoin = false, migrating = false, tab = "add";
-function blankGroup(id) { return { id, name: "", currency: "USD", legacy: false, people: [], peopleDocs: [], expenses: [], loaded: { people: false } } }
+function blankGroup(id) { return { id, name: "", currency: "USD", legacy: false, hasAdminFlag: false, people: [], peopleDocs: [], expenses: [], loaded: { people: false } } }
 
 const me = () => S.peopleDocs.find(p => p.uid && p.uid === uid) || null;
 const amAdmin = () => { const m = me(); return !!m && m.role === "admin" };
 const canEditGroup = () => amAdmin() || (S.legacy && !!me());
 const canDeleteGroup = () => amAdmin() || (S.legacy && !!me());
+const noAdmin = () => !S.peopleDocs.some(p => p.role === "admin");
 
 // ---------- currencies ----------
 const COMMON = ["USD", "EUR", "GBP", "JPY", "CNY", "HKD", "TWD", "KRW", "SGD", "MYR", "THB", "IDR", "PHP", "VND", "INR", "AUD", "NZD", "CAD", "CHF", "AED"];
@@ -341,7 +342,7 @@ $("createForm").addEventListener("submit", async e => {
     const gref = doc(collection(db, "groups"));
     const pref = doc(collection(gref, "people"));
     const b = writeBatch(db);
-    b.set(gref, { name, currency, createdAt: serverTimestamp(), createdBy: uid });
+    b.set(gref, { name, currency, createdAt: serverTimestamp(), createdBy: uid, hasAdmin: true });
     b.set(pref, { name: founder, uid, role: "admin", createdAt: Date.now() });
     b.set(doc(gref, "members", uid), { personId: pref.id });
     b.set(doc(userGroupsCol(uid), gref.id), { name, personId: pref.id, openedAt: Date.now() });
@@ -365,7 +366,7 @@ async function openGroup(gid) {
   const onErr = e => { console.error(e); if (S.id === gid) status(t("offline"), true) };
   unsubs.push(onSnapshot(gref, s => {
     if (!s.exists()) { if (S.id === gid) { forgetGroup(gid); goHome(); toast(t("deletedToast")) } return }
-    const d = s.data() || {}; S.name = d.name || t("groupFallback"); S.currency = d.currency || "USD"; S.legacy = !d.createdBy;
+    const d = s.data() || {}; S.name = d.name || t("groupFallback"); S.currency = d.currency || "USD"; S.legacy = !d.createdBy; S.hasAdminFlag = !!d.hasAdmin;
     document.title = S.name + " · Settle Up"; rememberGroup(); update();
   }, onErr));
   unsubs.push(onSnapshot(collection(gref, "people"), s => {
@@ -471,6 +472,7 @@ function openSettings() {
       <div class="mi">${ICON.globe}<span>${esc(t("languageRow"))}</span><select id="mLang" aria-label="${esc(t("languageRow"))}"><option value="en">English</option><option value="zh-Hant">繁體中文</option></select></div>
       <button class="mi" type="button" id="mAcct">${ICON.user}<span>${esc(t("accountRow"))}</span><span class="side">${esc(account ? (account.email || t("acctFallback")) : t("signInShort"))}</span></button>
       <button class="mi" type="button" id="mSwitch">${ICON.swap}<span>${esc(t("switchName"))}</span></button>
+      ${noAdmin() && !S.hasAdminFlag ? `<button class="mi" type="button" id="mBecome">${ICON.user}<span>${esc(t("becomeAdmin"))}<br><span class="hint">${esc(t("becomeAdminHint"))}</span></span></button>` : ""}
       ${canDeleteGroup() ? `<button class="mi danger" type="button" id="mDelete">${ICON.trash}<span>${esc(t("deleteGroup"))}</span><span class="side">${esc(t("adminsOnly"))}</span></button>` : ""}
     </div>`;
     wireClose(el);
@@ -482,6 +484,7 @@ function openSettings() {
     $("mLang").onchange = e => { setLang(e.target.value); applyLanguage(); refreshSheet() };
     $("mAcct").onclick = () => openSignIn();
     $("mSwitch").onclick = () => { closeSheet(); forceJoin = true; armed = null; update() };
+    if ($("mBecome")) $("mBecome").onclick = becomeAdmin;
     if ($("mDelete")) $("mDelete").onclick = openDelete;
   });
 }
@@ -573,6 +576,19 @@ function renderAdminPanel() {
   });
 }
 
+// Older groups were made before admins existed: the first member to ask becomes admin
+async function becomeAdmin() {
+  const m = me(); if (!m) return;
+  const ok = await act(async () => {
+    const b = writeBatch(db);
+    b.set(doc(db, "groups", S.id, "members", uid), { personId: m.id });
+    b.update(doc(db, "groups", S.id, "people", m.id), { role: "admin" });
+    b.update(doc(db, "groups", S.id), { hasAdmin: true });
+    await b.commit();
+  });
+  if (ok) toast(t("nowAdmin"));
+}
+
 // ---------- delete group ----------
 let deleting = false;
 function openDelete() {
@@ -653,30 +669,128 @@ function buildSummary(includeExpenses) {
   return lines.join("\n");
 }
 let includeExp = store.get("settleup.sumExp", true);
-$("shareSumBtn").onclick = () => openSheet("share", el => {
-  const text = buildSummary(includeExp);
+
+// Per person: what they paid and their share of expenses (repayments excluded), and net balance
+function breakdown() {
+  const b = balances(S.people, S.expenses);
+  const rows = S.people.map(p => ({ name: p, paid: 0, share: 0, net: b[p] }));
+  const by = Object.fromEntries(rows.map(r => [r.name, r]));
+  let hasPayments = false;
+  for (const e of S.expenses) {
+    if (e.payment) { hasPayments = true; continue }
+    if (by[e.payer]) by[e.payer].paid += e.cents;
+    for (const [p, c] of shares(e.cents, e.split)) if (by[p]) by[p].share += c;
+  }
+  return { rows: rows.sort((a, c) => c.net - a.net), tx: settle(b), hasPayments };
+}
+
+// Draw the summary as a picture with real tables, so it looks the same in every chat or email app
+async function drawSummaryImage(withExpenses) {
+  try { await document.fonts.ready } catch { }
+  const { rows, tx, hasPayments } = breakdown();
+  const total = S.expenses.filter(e => !e.payment).reduce((x, e) => x + e.cents, 0);
+  const exps = withExpenses ? S.expenses.filter(e => !e.payment).sort((a, c) => (a.createdAt || 0) - (c.createdAt || 0)) : [];
+  const MAXEXP = 40, shownExps = exps.slice(0, MAXEXP);
+  const W = 1080, P = 64, RH = 64, font = getComputedStyle(document.body).fontFamily;
+  const C = { bg: "#ffffff", fg: "#17231f", muted: "#5d6d67", line: "#d7e0dc", strong: "#9fb0a9", accent: "#1f6f5c", soft: "#e1efe9", owe: "#b4442e" };
+  const sections = [
+    { rows: Math.max(tx.length, 1) },
+    { rows: rows.length },
+    ...(shownExps.length ? [{ rows: shownExps.length + (exps.length > MAXEXP ? 1 : 0) }] : []),
+  ];
+  let H = P + 64 + 44 + 40;
+  sections.forEach(sec => { H += 56 + 52 + sec.rows * RH + 36 });
+  if (hasPayments) H += 40;
+  H += 60;
+  H += 60 + P - 36;
+  const cv = document.createElement("canvas"); cv.width = W; cv.height = H;
+  const g = cv.getContext("2d");
+  g.fillStyle = C.bg; g.fillRect(0, 0, W, H);
+  g.fillStyle = C.accent; g.fillRect(0, 0, W, 12);
+  const txt = (s, x, y, { size = 30, weight = 400, color = C.fg, align = "left", max } = {}) => {
+    g.font = `${weight} ${size}px ${font}`; g.fillStyle = color; g.textAlign = align; g.textBaseline = "middle";
+    let str = String(s);
+    if (max && g.measureText(str).width > max) { while (str.length > 1 && g.measureText(str + "…").width > max) str = str.slice(0, -1); str += "…" }
+    g.fillText(str, x, y);
+  };
+  const hline = (y, color = C.line, w = 2) => { g.fillStyle = color; g.fillRect(P, y, W - 2 * P, w) };
+  let y = P + 30;
+  txt(S.name, P, y, { size: 52, weight: 700, max: W - 2 * P }); y += 64;
+  txt(t("imgSubtitle", { x: fmtMinor(total), n: S.people.length, date: new Date().toLocaleDateString(locale(), { year: "numeric", month: "short", day: "numeric" }) }), P, y, { size: 28, color: C.muted, max: W - 2 * P }); y += 44 + 40;
+
+  // table helper: cols = [{label, w (fraction), align}]
+  const table = (title, cols, data) => {
+    txt(title, P, y, { size: 34, weight: 700 }); y += 56;
+    let x = P; const xs = cols.map(c => { const cx = x; x += c.w * (W - 2 * P); return cx });
+    cols.forEach((c, i) => txt(c.label, c.align === "right" ? xs[i] + c.w * (W - 2 * P) : xs[i], y, { size: 24, weight: 600, color: C.muted, align: c.align || "left" }));
+    y += 26; hline(y, C.strong, 3); y += 6;
+    data.forEach((r, ri) => {
+      r.forEach((cell, i) => {
+        const c = cols[i], cw = c.w * (W - 2 * P) - 16;
+        const v = typeof cell === "object" ? cell : { v: cell };
+        txt(v.v, c.align === "right" ? xs[i] + c.w * (W - 2 * P) : xs[i], y + RH / 2, { size: 30, weight: v.bold ? 700 : 400, color: v.color || C.fg, align: c.align || "left", max: cw });
+      });
+      y += RH;
+      if (ri < data.length - 1) hline(y);
+    });
+    y += 44;
+  };
+  table(t("whoPays"), [{ label: t("colFrom"), w: .38 }, { label: t("colTo"), w: .38 }, { label: t("colAmount"), w: .24, align: "right" }],
+    tx.length ? tx.map(x => [x.from, x.to, { v: fmtMinor(x.cents), color: C.owe, bold: true }]) : [[{ v: t("sumEven"), color: C.accent, bold: true }, "", ""]]);
+  const sign = v => v > 0 ? "+" : v < 0 ? "−" : "";
+  table(t("balances"), [{ label: t("colName"), w: .34 }, { label: t("colPaid"), w: .22, align: "right" }, { label: t("colShare"), w: .22, align: "right" }, { label: t("colNet"), w: .22, align: "right" }],
+    rows.map(r => [r.name, fmtMinor(r.paid), fmtMinor(r.share), { v: sign(r.net) + fmtMinor(Math.abs(r.net)), color: r.net > 0 ? C.accent : r.net < 0 ? C.owe : C.muted, bold: true }]));
+  if (hasPayments) { y -= 24; txt(t("netNote"), P, y, { size: 24, color: C.muted }); y += 52 }
+  if (shownExps.length) {
+    const data = shownExps.map(e => [e.desc, e.payer, { v: fmtMinor(e.cents) + (e.origCurrency && e.origCurrency !== S.currency ? "*" : "") }]);
+    if (exps.length > MAXEXP) data.push([{ v: t("moreRows", { n: exps.length - MAXEXP }), color: C.muted }, "", ""]);
+    table(t("sumExpenses").replace(/\*/g, ""), [{ label: t("colItem"), w: .5 }, { label: t("colPaidBy"), w: .26 }, { label: t("colAmount"), w: .24, align: "right" }], data);
+    if (shownExps.some(e => e.origCurrency && e.origCurrency !== S.currency)) { y -= 24; txt(t("fxStar"), P, y, { size: 24, color: C.muted }); y += 52 }
+  }
+  hline(y - 20); txt(t("madeWith"), P, y + 14, { size: 24, color: C.muted });
+  // Crop to the content actually drawn
+  const out = document.createElement("canvas"); out.width = W; out.height = Math.min(H, Math.ceil(y + 14 + P));
+  out.getContext("2d").drawImage(cv, 0, 0);
+  return out;
+}
+const canvasBlob = cv => new Promise(r => cv.toBlob(r, "image/png"));
+function textSummary() { return buildSummary(includeExp) }
+
+$("shareSumBtn").onclick = () => openSheet("share", async el => {
   el.innerHTML = `${sheetHead(t("shareSummary"))}
     <label class="toggle"><span>${esc(t("includeExpenses"))}</span><input type="checkbox" id="incExp" ${includeExp ? "checked" : ""}></label>
-    <pre class="msg" id="sumText">${esc(text)}</pre>
-    <div class="share-grid">
+    <div class="sum-img-wrap"><img id="sumImg" alt="${esc(t("shareSummary"))}"></div>
+    <button class="btn primary wide" id="shImg" type="button" disabled>${ICON.more} ${esc(t("shareImage"))}</button>
+    <p class="hint" id="imgNote">${esc(t("shareImgNote"))}</p>
+    <div class="sec-label">${esc(t("sendAsText"))}</div>
+    <div class="share-grid three">
       <a class="btn ghost" id="shWa" target="_blank" rel="noopener">${ICON.wa} ${esc(t("whatsapp"))}</a>
-      <button class="btn ghost" id="shSignal" type="button">${ICON.signal} ${esc(t("signal"))}</button>
       <a class="btn ghost" id="shMail">${ICON.mail} ${esc(t("email"))}</a>
-      <button class="btn ghost" id="shMore" type="button">${ICON.more} ${esc(t("moreApps"))}</button>
-    </div>
-    <button class="btn primary wide" id="shCopy" type="button">${ICON.copy} ${esc(t("copyText"))}</button>
-    <p class="hint">${esc(t("shareNote"))}</p>`;
+      <button class="btn ghost" id="shCopy" type="button">${ICON.copy} ${esc(t("copyText"))}</button>
+    </div>`;
   wireClose(el);
   $("incExp").onchange = e => { includeExp = e.target.checked; store.set("settleup.sumExp", includeExp); refreshSheet() };
+  const text = textSummary();
   $("shWa").href = "https://wa.me/?text=" + encodeURIComponent(text);
   $("shMail").href = "mailto:?subject=" + encodeURIComponent(t("sumTitle", { name: S.name }).replace(/\*/g, "")) + "&body=" + encodeURIComponent(text.replace(/\*/g, ""));
-  const nativeShare = async () => {
-    if (navigator.share) { try { await navigator.share({ text }); return } catch (e) { if (e.name === "AbortError") return } }
-    copyText(text, t("textCopied"));
-  };
-  $("shSignal").onclick = nativeShare;
-  $("shMore").onclick = nativeShare;
   $("shCopy").onclick = () => copyText(text, t("textCopied"));
+  const cv = await drawSummaryImage(includeExp);
+  if (sheetName !== "share" || !$("sumImg")) return;
+  const blob = await canvasBlob(cv);
+  const url = URL.createObjectURL(blob);
+  $("sumImg").src = url;
+  const safe = (S.name || "settle-up").replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g, "").slice(0, 40) || "settle-up";
+  const file = new File([blob], `${safe}-settle-up.png`, { type: "image/png" });
+  const canFiles = !!(navigator.canShare && navigator.canShare({ files: [file] }));
+  $("shImg").disabled = false;
+  if (!canFiles) $("imgNote").textContent = t("imgHint");
+  $("shImg").onclick = async () => {
+    if (canFiles) {
+      try { await navigator.share({ files: [file], title: t("sumTitle", { name: S.name }).replace(/\*/g, ""), text: t("sumOpen", { url: groupLink() }) }); return }
+      catch (e) { if (e.name === "AbortError") return }
+    }
+    $("imgNote").textContent = t("imgHint");
+  };
 });
 
 // ---------- render group ----------

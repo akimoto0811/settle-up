@@ -19,6 +19,13 @@ service cloud.firestore {
         && get(personPath(gid, get(m).data.personId)).data.get('uid', null) == request.auth.uid
         && get(personPath(gid, get(m).data.personId)).data.get('role', 'member') == 'admin';
     }
+    // Claiming admin in an older group that has none: the batch also sets hasAdmin on the group
+    function claimingAdmin(gid) {
+      let m = memberPath(gid);
+      return existsAfter(m)
+        && getAfter(personPath(gid, getAfter(m).data.personId)).data.get('uid', null) == request.auth.uid
+        && getAfter(personPath(gid, getAfter(m).data.personId)).data.get('role', 'member') == 'admin';
+    }
     // Groups made before admins existed stay editable by everyone
     function legacy(gid) { return exists(g(gid)) && !('createdBy' in get(g(gid)).data); }
 
@@ -35,9 +42,15 @@ service cloud.firestore {
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 60
         && request.resource.data.createdBy == request.auth.uid;
-      allow update: if signedIn()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['currency', 'name'])
-        && (isAdmin(gid) || legacy(gid));
+      allow update: if signedIn() && (
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['currency', 'name'])
+          && (isAdmin(gid) || legacy(gid)))
+        // First admin of an older group without one
+        || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['hasAdmin'])
+          && request.resource.data.hasAdmin == true
+          && resource.data.get('hasAdmin', false) != true
+          && claimingAdmin(gid))
+      );
       // Admins can delete the group (older groups without admins: any member)
       allow delete: if signedIn() && (isAdmin(gid) || !('createdBy' in resource.data));
 
@@ -67,6 +80,12 @@ service cloud.firestore {
           // Leave a name you hold
           || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['uid'])
             && resource.data.get('uid', null) == request.auth.uid && request.resource.data.uid == null)
+          // Become the first admin of an older group (together with setting hasAdmin on the group)
+          || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role'])
+            && request.resource.data.role == 'admin'
+            && resource.data.get('uid', null) == request.auth.uid
+            && get(g(gid)).data.get('hasAdmin', false) != true
+            && getAfter(g(gid)).data.get('hasAdmin', false) == true)
           // Admin: rename, change role, or unlink a device (never link someone else)
           || (isAdmin(gid)
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['uid', 'role', 'name'])
