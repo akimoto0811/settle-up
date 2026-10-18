@@ -5,13 +5,13 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>Settle Up</title>
 <meta name="description" content="Split shared expenses with friends and see who owes whom.">
-<meta name="theme-color" content="#0f6e56" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#13493d" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f3f6f4" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0f1614" media="(prefers-color-scheme: dark)">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Settle Up">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
@@ -109,7 +109,16 @@
       <div class="sec-head" id="othersHead"><h2 data-i18n="othersSettle">Other payments</h2></div>
       <div class="list-card" id="othersList"></div>
 
-      <div class="sec-head"><h2 data-i18n="recent">Recent</h2><button class="link" id="seeAllBtn" type="button" data-i18n="seeAll">See all</button></div>
+      <div class="empty-card" id="emptyCard" hidden>
+        <p class="empty-title" data-i18n="emptyTitle">Start splitting</p>
+        <p class="hint" id="emptyText"></p>
+        <div class="empty-actions">
+          <button class="btn primary" id="emptyInvite" type="button" data-i18n="inviteFriends">Invite friends</button>
+          <button class="btn ghost" id="emptyAdd" type="button" data-i18n="addFirst">Add the first expense</button>
+        </div>
+      </div>
+
+      <div class="sec-head" id="recentHead"><h2 data-i18n="recent">Recent</h2><button class="link" id="seeAllBtn" type="button" data-i18n="seeAll">See all</button></div>
       <div class="feed" id="recentList"></div>
 
       <button class="chip-action" id="shareSumBtn" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v13M7 8l5-5 5 5M5 14v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/></svg> <span data-i18n="shareSummary">Share summary</span></button>

@@ -324,3 +324,24 @@ body:not(.in-group) .main{padding-top:20px}
 .sheet.full .add-head .icon-btn{color:var(--hero-fg)}
 .amount-input{font-family:var(--body)!important}
 .detail-amt{font-family:var(--body)}
+
+/* status banner: a small pill under the status bar, not covering the balance */
+body.in-group .banner-wrap{position:fixed;top:calc(env(safe-area-inset-top,0px) + 6px);left:0;right:0;z-index:45;padding:0 var(--gutter-r) 0 var(--gutter-l);pointer-events:none}
+.banner{font-size:.8rem;padding:7px 12px;border-radius:999px;box-shadow:0 2px 10px rgba(0,0,0,.12);max-width:520px;margin:0 auto;text-align:center;pointer-events:auto}
+
+/* ===== floating card layout: light top strip everywhere, green card with all corners rounded ===== */
+html{background:var(--bg)}
+.topbar{background:var(--bg);color:var(--fg);border-bottom:0}
+.topbar .logo{color:var(--fg)}
+.topbar .logo span{color:var(--accent)}
+.topbar .lang,.topbar .chip-btn{background:var(--surface);border-color:var(--line);color:var(--fg)}
+.hero{margin:calc(env(safe-area-inset-top,0px) + 10px) var(--gutter-r) 0 var(--gutter-l);border-radius:26px;padding:8px 18px 20px}
+.hero-bar{margin:0 -6px}
+.page-head{background:transparent;color:var(--fg);padding:calc(env(safe-area-inset-top,0px) + 16px) var(--gutter-r) 4px var(--gutter-l);border-radius:0}
+.filters{padding-top:8px}
+.sheet.full .add-head{background:transparent;color:var(--fg);margin:0;padding:calc(env(safe-area-inset-top,0px) + 6px) 0 4px}
+.sheet.full .add-head .icon-btn{color:var(--fg)}
+/* empty state */
+.empty-card{background:var(--surface);border:1px solid var(--line);border-radius:22px;padding:22px 18px;display:flex;flex-direction:column;gap:8px;align-items:center;text-align:center;margin-top:14px}
+.empty-title{font-weight:700;font-size:1.05rem;margin:0}
+.empty-actions{display:flex;flex-direction:column;gap:8px;width:100%;margin-top:8px}

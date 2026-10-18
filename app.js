@@ -374,8 +374,13 @@ $("createForm").addEventListener("submit", async e => {
     b.set(pref, { name: founder, uid, role: "admin", createdAt: Date.now() });
     b.set(doc(gref, "members", uid), { personId: pref.id });
     b.set(doc(userGroupsCol(uid), gref.id), { name, personId: pref.id, openedAt: Date.now() });
-    // Don't wait for the server: the new group shows straight away from the phone's copy, and the save finishes in the background
-    b.commit().catch(e3 => { console.error(e3); forgetGroup(gref.id); goHome(); status(t("createFail"), true) });
+    // Show the new group straight away; live updates start once the server has saved it
+    const saving = b.commit();
+    pendingGroups[gref.id] = {
+      saving,
+      initial: { name, currency, legacy: false, hasAdminFlag: true, peopleDocs: [{ id: pref.id, name: founder, uid, role: "admin", createdAt: Date.now() }] },
+    };
+    saving.catch(e3 => { console.error(e3); delete pendingGroups[gref.id]; forgetGroup(gref.id); goHome(); status(t("createFail"), true) });
     $("groupName").value = ""; $("founderName").value = ""; $("createForm").hidden = true;
     tab = "home";
     location.hash = gref.id;
@@ -384,12 +389,37 @@ $("createForm").addEventListener("submit", async e => {
 });
 
 // ---------- open group (live) ----------
+const pendingGroups = {};   // groups created on this phone that the server is still saving
 async function openGroup(gid) {
   S = blankGroup(gid);
   S.loaded.group = false;
-  showLoading();
+  const pending = pendingGroups[gid];
+  if (pending) {
+    // Fill in what we already know so the screen appears instantly
+    Object.assign(S, pending.initial, { people: pending.initial.peopleDocs.map(p => p.name), expenses: [] });
+    S.loaded = { people: true, group: true };
+    document.title = S.name + " · Settle Up"; rememberGroup(); update();
+    try { await pending.saving } catch { return }
+    delete pendingGroups[gid];
+    if (S.id !== gid) return;
+  } else showLoading();
+  subscribeGroup(gid, 0);
+}
+
+// Live listeners for one group. If the server refuses or drops a listener, retry quietly a few times
+// before telling the person; a working snapshot clears any warning.
+function subscribeGroup(gid, attempt) {
+  unsubs.forEach(u => u()); unsubs = [];
   const gref = doc(db, "groups", gid);
-  const onErr = e => { console.error(e); if (S.id === gid) status(t("offline"), true) };
+  let failed = false;
+  const onErr = e => {
+    console.warn("listener", e.code || e);
+    if (S.id !== gid || failed) return;
+    failed = true;
+    if (attempt < 4) setTimeout(() => { if (S.id === gid) subscribeGroup(gid, attempt + 1) }, 800 * (attempt + 1));
+    else status(navigator.onLine === false ? t("offline") : t("syncFail"), true);
+  };
+  const ok = s => { if (!fromCache(s) && attempt > 0 && !$("statusBanner").hidden) status("") };
   const fromCache = s => !!(s.metadata && s.metadata.fromCache);
   // Snapshots come from the phone's cache first (instant), then from the server
   unsubs.push(onSnapshot(gref, { includeMetadataChanges: false }, s => {
@@ -400,19 +430,26 @@ async function openGroup(gid) {
       if (S.loaded.group) toast(t("deletedToast")); else status(t("badLink"), true);
       return;
     }
+    ok(s);
     S.loaded.group = true;
     const d = s.data() || {}; S.name = d.name || t("groupFallback"); S.currency = d.currency || "USD"; S.legacy = !d.createdBy; S.hasAdminFlag = !!d.hasAdmin;
     document.title = S.name + " · Settle Up"; rememberGroup(); update();
   }, onErr));
   unsubs.push(onSnapshot(collection(gref, "people"), { includeMetadataChanges: false }, s => {
+    if (S.id !== gid) return;
     if (s.empty && fromCache(s)) return;              // nothing cached yet: wait for the server
+    ok(s);
     S.peopleDocs = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
     S.people = S.peopleDocs.map(p => p.name); S.loaded.people = true; update();
   }, onErr));
   unsubs.push(onSnapshot(collection(gref, "expenses"), { includeMetadataChanges: false }, s => {
+    if (S.id !== gid) return;
+    ok(s);
     S.expenses = s.docs.map(d => ({ id: d.id, ...d.data() })); update();
   }, onErr));
 }
+// Coming back online: reconnect the group straight away
+window.addEventListener("online", () => { if (S.id && !$("statusBanner").hidden) { status(""); subscribeGroup(S.id, 0) } });
 
 function update() {
   if (!S.id || !S.loaded.people || S.loaded.group === false || migrating || deleting) return;
@@ -503,6 +540,8 @@ $("filters").addEventListener("click", e => {
   renderActivity();
 });
 $("plusBtn").onclick = openAdd;
+$("emptyAdd").onclick = openAdd;
+$("emptyInvite").onclick = () => shareInvite();
 $("addClose").onclick = () => closeSheet();
 function openAdd() {
   if (!me()) return;
@@ -934,8 +973,11 @@ function render() {
 
   // recent
   const sorted = [...S.expenses].sort((a, c) => (c.createdAt || 0) - (a.createdAt || 0));
-  $("recentList").innerHTML = sorted.length ? sorted.slice(0, 4).map(e => expenseRow(e, myName)).join("")
-    : `<p class="empty-state">${esc(S.people.length < 2 ? t("settledInvite") : t("emptyActivity"))}</p>`;
+  const empty = !sorted.length;
+  $("emptyCard").hidden = !empty; $("recentHead").hidden = empty; $("recentList").hidden = empty;
+  $("emptyText").textContent = S.people.length < 2 ? t("emptyInviteText") : t("emptyAddText");
+  $("emptyInvite").hidden = S.people.length >= 2;
+  $("recentList").innerHTML = sorted.slice(0, 4).map(e => expenseRow(e, myName)).join("");
   wireExpenseRows($("recentList"));
   $("seeAllBtn").hidden = sorted.length <= 4;
   $("shareSumBtn").hidden = !S.expenses.length;
