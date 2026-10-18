@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Settle Up</title>
+<meta name="description" content="Split shared expenses with friends and see who owes whom.">
+<meta name="theme-color" content="#1f6f5c">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Settle Up">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Figtree:wght@400;500;600&family=JetBrains+Mono:wght@500;700&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Settle<span>Up</span></h1>
+      <p class="sub">Log who paid for what. See who owes whom.</p>
+    </div>
+  </header>
+
+  <div class="banner" id="statusBanner" hidden><span id="statusText"></span></div>
+
+  <!-- Start screen: create or reopen a group -->
+  <section id="startView" hidden>
+    <form class="card" id="createForm" novalidate>
+      <h2>Start a group</h2>
+      <label>Group name<input id="groupName" placeholder="Bali trip, Flat 4B, Friday dinners…" maxlength="60" autocomplete="off"></label>
+      <div class="row">
+        <label>Your name<input id="founderName" placeholder="Tobby" maxlength="24" autocomplete="off"></label>
+        <label>Currency
+          <select id="newCurrency">
+            <option value="USD">$ USD</option><option value="EUR">€ EUR</option><option value="GBP">£ GBP</option>
+            <option value="JPY">¥ JPY</option><option value="PHP">₱ PHP</option><option value="AUD">A$ AUD</option>
+            <option value="CAD">C$ CAD</option><option value="SGD">S$ SGD</option>
+          </select>
+        </label>
+      </div>
+      <p class="err" id="createErr"></p>
+      <button class="btn primary" type="submit">Create group</button>
+      <p class="preview">You'll get a link to send your friends. Anyone with the link can view and add expenses.</p>
+    </form>
+    <div class="card" id="recentCard" hidden>
+      <h2>Your groups</h2>
+      <div class="recent" id="recent"></div>
+    </div>
+  </section>
+
+  <!-- Group screen -->
+  <div id="groupView" hidden style="display:contents">
+    <section>
+      <div class="group-bar">
+        <span class="group-name" id="gName"></span>
+        <button class="btn small ghost" id="shareBtn" type="button">Copy invite link</button>
+        <a class="link" href="#" id="homeLink">All groups</a>
+      </div>
+      <div class="me">You are
+        <select id="meSel" aria-label="Who are you"></select>
+      </div>
+    </section>
+
+    <section aria-labelledby="h-settle">
+      <div class="sec-head"><h2 id="h-settle">Who pays whom</h2><span class="eyebrow" id="txCount"></span></div>
+      <div class="transfers" id="transfers"></div>
+    </section>
+
+    <section aria-labelledby="h-bal">
+      <div class="sec-head"><h2 id="h-bal">Balances</h2><span class="eyebrow num" id="total"></span></div>
+      <div class="bal" id="balances"></div>
+    </section>
+
+    <section aria-labelledby="h-add">
+      <h2 id="h-add">Add an expense</h2>
+      <form id="expForm" novalidate>
+        <div class="row">
+          <label>What was it for<input id="desc" placeholder="Dinner, Uber, groceries…" maxlength="60" autocomplete="off"></label>
+          <label>Amount<input id="amount" inputmode="decimal" placeholder="0.00" autocomplete="off"></label>
+        </div>
+        <label>Paid by<select id="payer"></select></label>
+        <fieldset>
+          <legend><span>Split between</span><span><button type="button" class="link" id="selAll">All</button> · <button type="button" class="link" id="selNone">None</button></span></legend>
+          <div class="split-opts" id="splitOpts"></div>
+        </fieldset>
+        <p class="preview num" id="preview"></p>
+        <p class="err" id="expErr"></p>
+        <button class="btn primary" type="submit">Add expense</button>
+      </form>
+    </section>
+
+    <section aria-labelledby="h-ledger">
+      <div class="sec-head"><h2 id="h-ledger">Expenses</h2><span class="eyebrow" id="expCount"></span></div>
+      <div class="ledger" id="ledger"></div>
+    </section>
+
+    <section aria-labelledby="h-people">
+      <h2 id="h-people">People</h2>
+      <div class="chips" id="people"></div>
+      <div class="inline">
+        <input id="newPerson" placeholder="Add a friend's name" maxlength="24" autocomplete="off">
+        <button class="btn primary" id="addPerson" type="button">Add</button>
+      </div>
+      <p class="err" id="personErr"></p>
+    </section>
+
+    <footer>
+      <label style="flex-direction:row;align-items:center;gap:8px">Currency
+        <select id="currency" style="width:auto">
+          <option value="USD">$ USD</option><option value="EUR">€ EUR</option><option value="GBP">£ GBP</option>
+          <option value="JPY">¥ JPY</option><option value="PHP">₱ PHP</option><option value="AUD">A$ AUD</option>
+          <option value="CAD">C$ CAD</option><option value="SGD">S$ SGD</option>
+        </select>
+      </label>
+      <span>Syncs live for everyone with the link.</span>
+    </footer>
+  </div>
+</div>
+<div class="toast" id="toast" hidden></div>
+<script type="module" src="app.js"></script>
+</body>
+</html>

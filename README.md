@@ -1,0 +1,60 @@
+# Settle Up
+
+Split shared expenses with friends. Make a group, send the link, and everyone adds what they paid from their own phone. The app works out the fewest payments needed to settle up.
+
+- No accounts for your friends. Anyone with the group link can view and add.
+- Syncs live across phones.
+- Installs to the home screen like an app.
+- Free: hosted on GitHub Pages, data in Firebase's free plan.
+
+Setup takes about 15 minutes, once.
+
+## 1. Create the Firebase database (free)
+
+1. Go to https://console.firebase.google.com and sign in with your Google account.
+2. **Create a project** → name it `settle-up` → you can turn off Google Analytics → **Create**.
+3. In the left menu: **Build → Authentication → Get started → Sign-in method → Anonymous → Enable → Save**.
+   (This gives each phone a hidden ID so the database can block random bots. Your friends never see a login.)
+4. Left menu: **Build → Firestore Database → Create database** → pick a location near you → **Start in production mode** → **Create**.
+5. In Firestore, open the **Rules** tab, delete what's there, paste everything from `firestore.rules`, and click **Publish**.
+6. Click the gear icon → **Project settings** → scroll to **Your apps** → click the **`</>`** (Web) icon → name it `settle-up` → **Register app**. Leave "Firebase Hosting" unticked.
+7. Firebase shows a `firebaseConfig = { ... }` block. Copy those values into `firebase-config.js`, replacing each `PASTE_...` value.
+
+## 2. Put it on GitHub Pages
+
+1. On https://github.com, click **New repository** → name it `settle-up` → **Public** → **Create repository**.
+2. Click **uploading an existing file**, drag in every file and the `icons` folder from this project, then **Commit changes**.
+3. Go to **Settings → Pages**. Under **Branch**, pick `main` and `/ (root)` → **Save**.
+4. After a minute your app is live at `https://<your-username>.github.io/settle-up/`.
+
+## 3. Allow your site in Firebase
+
+Firebase → **Authentication → Settings → Authorized domains → Add domain** → add `<your-username>.github.io`.
+
+## Using it
+
+1. Open your app link, enter a group name and your name, then **Create group**.
+2. Tap **Copy invite link** and send it to your friends in your group chat.
+3. Each friend opens the link and picks their name under **You are**. If they're not listed, they add themselves under **People**.
+4. Whoever pays for something adds it: what it was, the amount, who paid, and who it's split between.
+5. **Who pays whom** always shows the fewest payments to even everyone out. Tap **Mark as paid** once someone pays back.
+
+**Add to home screen:** on iPhone, open the link in Safari → Share → **Add to Home Screen**. On Android, open it in Chrome → menu → **Install app**.
+
+## Good to know
+
+- The group link works like a key. Anyone who has it can add or delete expenses, so only share it with the group.
+- Firebase's free plan covers far more than a friend group will use (50,000 reads and 20,000 writes a day).
+- To change the app later, edit the files and upload them to the repo again. Phones pick up the new version the next time they open it.
+- The `firebase-config.js` values are meant to be public. The security rules in `firestore.rules` are what protect the data.
+
+## Files
+
+| File | What it does |
+|---|---|
+| `index.html` | The page layout |
+| `style.css` | Colors, fonts, light and dark mode |
+| `app.js` | Groups, expenses, balances and the settle-up math |
+| `firebase-config.js` | Your Firebase project settings (you fill this in) |
+| `firestore.rules` | Database security rules (paste into Firebase) |
+| `manifest.webmanifest`, `sw.js`, `icons/` | Make it installable and quick to open |

@@ -1,0 +1,36 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function groupExists(gid) { return exists(/databases/$(database)/documents/groups/$(gid)); }
+
+    match /groups/{gid} {
+      // Anyone with the exact group link can open it. Nobody can list all groups.
+      allow get: if signedIn();
+      allow list: if false;
+      allow create: if signedIn()
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 60;
+      allow update: if signedIn()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['currency', 'name']);
+      allow delete: if false;
+
+      match /people/{pid} {
+        allow read, delete: if signedIn() && groupExists(gid);
+        allow create, update: if signedIn() && groupExists(gid)
+          && request.resource.data.name is string
+          && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 24;
+      }
+
+      match /expenses/{eid} {
+        allow read, delete: if signedIn() && groupExists(gid);
+        allow create, update: if signedIn() && groupExists(gid)
+          && request.resource.data.desc is string && request.resource.data.desc.size() <= 80
+          && request.resource.data.cents is int && request.resource.data.cents > 0
+          && request.resource.data.payer is string
+          && request.resource.data.split is list && request.resource.data.split.size() > 0;
+      }
+    }
+  }
+}
