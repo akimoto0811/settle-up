@@ -3,33 +3,97 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     function signedIn() { return request.auth != null; }
-    function groupExists(gid) { return exists(/databases/$(database)/documents/groups/$(gid)); }
+    function g(gid) { return /databases/$(database)/documents/groups/$(gid); }
+    function personPath(gid, pid) { return /databases/$(database)/documents/groups/$(gid)/people/$(pid); }
+    function memberPath(gid) { return /databases/$(database)/documents/groups/$(gid)/members/$(request.auth.uid); }
+
+    // The person `pid` in this group is the signed-in user
+    function isPerson(gid, pid) {
+      return exists(personPath(gid, pid)) && get(personPath(gid, pid)).data.get('uid', null) == request.auth.uid;
+    }
+    // The signed-in user holds an admin name in this group
+    function isAdmin(gid) {
+      let m = memberPath(gid);
+      return exists(m)
+        && exists(personPath(gid, get(m).data.personId))
+        && get(personPath(gid, get(m).data.personId)).data.get('uid', null) == request.auth.uid
+        && get(personPath(gid, get(m).data.personId)).data.get('role', 'member') == 'admin';
+    }
+    // Groups made before admins existed stay editable by everyone
+    function legacy(gid) { return exists(g(gid)) && !('createdBy' in get(g(gid)).data); }
+
+    // Each user's own list of groups (follows their account across devices)
+    match /users/{userId}/groups/{gid} {
+      allow read, write: if signedIn() && request.auth.uid == userId;
+    }
 
     match /groups/{gid} {
-      // Anyone with the exact group link can open it. Nobody can list all groups.
+      // Anyone with the exact group link or code can open it. Nobody can list all groups.
       allow get: if signedIn();
       allow list: if false;
       allow create: if signedIn()
         && request.resource.data.name is string
-        && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 60;
+        && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 60
+        && request.resource.data.createdBy == request.auth.uid;
       allow update: if signedIn()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['currency', 'name']);
-      allow delete: if false;
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['currency', 'name'])
+        && (isAdmin(gid) || legacy(gid));
+      // Admins can delete the group (older groups without admins: any member)
+      allow delete: if signedIn() && (isAdmin(gid) || !('createdBy' in resource.data));
+
+      // Maps a signed-in user to the person they are in this group
+      match /members/{mid} {
+        allow read: if signedIn();
+        allow create, update: if signedIn() && mid == request.auth.uid
+          && getAfter(personPath(gid, request.resource.data.personId)).data.get('uid', null) == request.auth.uid;
+        allow delete: if signedIn() && (mid == request.auth.uid || isAdmin(gid) || legacy(gid));
+      }
 
       match /people/{pid} {
-        allow read, delete: if signedIn() && groupExists(gid);
-        allow create, update: if signedIn() && groupExists(gid)
+        allow read: if signedIn() && exists(g(gid));
+        // Add yourself (uid = you) or an invite (uid = null). Only the creator starts as admin.
+        allow create: if signedIn() && existsAfter(g(gid))
           && request.resource.data.name is string
-          && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 24;
+          && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 24
+          && request.resource.data.get('uid', null) in [null, request.auth.uid]
+          && (request.resource.data.get('role', 'member') == 'member'
+              || (!exists(g(gid))
+                  && getAfter(g(gid)).data.createdBy == request.auth.uid
+                  && request.resource.data.uid == request.auth.uid));
+        allow update: if signedIn() && (
+          // Join as this name
+          (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['uid'])
+            && request.resource.data.uid == request.auth.uid)
+          // Leave a name you hold
+          || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['uid'])
+            && resource.data.get('uid', null) == request.auth.uid && request.resource.data.uid == null)
+          // Admin: rename, change role, or unlink a device (never link someone else)
+          || (isAdmin(gid)
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['uid', 'role', 'name'])
+            && request.resource.data.get('role', 'member') in ['member', 'admin']
+            && (request.resource.data.get('uid', null) == resource.data.get('uid', null)
+                || request.resource.data.get('uid', null) == null))
+        );
+        allow delete: if signedIn() && (resource.data.get('uid', null) == null || isAdmin(gid) || legacy(gid));
       }
 
       match /expenses/{eid} {
-        allow read, delete: if signedIn() && groupExists(gid);
-        allow create, update: if signedIn() && groupExists(gid)
+        allow read: if signedIn() && exists(g(gid));
+        // You can only add expenses as yourself
+        allow create: if signedIn() && exists(g(gid))
           && request.resource.data.desc is string && request.resource.data.desc.size() <= 80
           && request.resource.data.cents is int && request.resource.data.cents > 0
           && request.resource.data.payer is string
-          && request.resource.data.split is list && request.resource.data.split.size() > 0;
+          && request.resource.data.split is list && request.resource.data.split.size() > 0
+          && request.resource.data.addedBy is string
+          && isPerson(gid, request.resource.data.addedBy);
+        allow update: if false;
+        // Delete your own expenses; admins can delete any
+        allow delete: if signedIn() && (
+          resource.data.get('addedBy', null) == null
+          || isPerson(gid, resource.data.addedBy)
+          || isAdmin(gid)
+          || legacy(gid));
       }
     }
   }

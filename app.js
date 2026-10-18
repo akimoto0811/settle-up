@@ -22,17 +22,35 @@ const session = {
   get(k) { try { return sessionStorage.getItem(k) } catch { return null } },
   set(k, v) { try { sessionStorage.setItem(k, v) } catch { } }
 };
+const ICON = {
+  link: '<svg viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>',
+  users: '<svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="4"/><path d="M2 21v-1a6 6 0 0 1 6-6h2a6 6 0 0 1 6 6v1M16 4a4 4 0 0 1 0 8M22 21v-1a6 6 0 0 0-4-5.6"/></svg>',
+  edit: '<svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16zM14 6l4 4"/></svg>',
+  money: '<svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg>',
+  globe: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>',
+  user: '<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a7 7 0 0 1 16 0v1"/></svg>',
+  swap: '<svg viewBox="0 0 24 24"><path d="M7 4L3 8l4 4M3 8h14M17 20l4-4-4-4M21 16H7"/></svg>',
+  trash: '<svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M5 7l1 13h12l1-13M9 7V4h6v3"/></svg>',
+  wa: '<svg viewBox="0 0 24 24"><path d="M4 20l1.3-3.9A8 8 0 1 1 8 19z"/><path d="M9 9.5c.3 2 2.5 4.2 4.5 4.5l1.2-1.2 1.8.8-.4 1.6c-3.6.4-7.7-3.7-7.3-7.3l1.6-.4.8 1.8z"/></svg>',
+  signal: '<svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 0 0-7.8 13.5L3 21l4.5-1.2A9 9 0 1 0 12 3z"/></svg>',
+  mail: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>',
+  more: '<svg viewBox="0 0 24 24"><path d="M12 3v13M7 8l5-5 5 5M5 14v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/></svg>',
+  copy: '<svg viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>',
+  google: '<svg viewBox="0 0 24 24"><path d="M20 12.2c0-.6-.1-1.2-.2-1.7H12v3.3h4.5a3.9 3.9 0 0 1-1.7 2.5v2h2.7c1.6-1.4 2.5-3.6 2.5-6.1z"/><path d="M12 20.5c2.3 0 4.2-.8 5.5-2.1l-2.7-2a5 5 0 0 1-7.5-2.7H4.5v2.1A8.5 8.5 0 0 0 12 20.5zM7.3 13.7a5 5 0 0 1 0-3.4V8.2H4.5a8.5 8.5 0 0 0 0 7.6zM12 6.9c1.3 0 2.5.5 3.4 1.3l2.5-2.5A8.5 8.5 0 0 0 4.5 8.2l2.8 2.1A5 5 0 0 1 12 6.9z"/></svg>',
+  check: '<svg viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></svg>',
+};
 
 // ---------- state ----------
 let S = blankGroup(null);
 let unsubs = [];
-let db, auth, uid = null, account = null;   // account = signed-in (non-anonymous) user, else null
-let forceJoin = false, migrating = false;
+let db, auth, uid = null, account = null;
+let forceJoin = false, migrating = false, tab = "add";
 function blankGroup(id) { return { id, name: "", currency: "USD", legacy: false, people: [], peopleDocs: [], expenses: [], loaded: { people: false } } }
 
 const me = () => S.peopleDocs.find(p => p.uid && p.uid === uid) || null;
 const amAdmin = () => { const m = me(); return !!m && m.role === "admin" };
 const canEditGroup = () => amAdmin() || (S.legacy && !!me());
+const canDeleteGroup = () => amAdmin() || (S.legacy && !!me());
 
 // ---------- currencies ----------
 const COMMON = ["USD", "EUR", "GBP", "JPY", "CNY", "HKD", "TWD", "KRW", "SGD", "MYR", "THB", "IDR", "PHP", "VND", "INR", "AUD", "NZD", "CAD", "CHF", "AED"];
@@ -53,12 +71,12 @@ function fmtAmount(amt, c) {
   try { return new Intl.NumberFormat(locale(), { style: "currency", currency: c }).format(amt) }
   catch { return amt.toFixed(digits(c)) + " " + c }
 }
-function fillCurrencySelect(sel, value) {
+function currencyOptions() {
   const opt = c => `<option value="${c}">${c} · ${esc(curName(c))}</option>`;
   const common = COMMON.filter(c => ALL.includes(c));
-  sel.innerHTML = `<optgroup label="${t("common")}">${common.map(opt).join("")}</optgroup><optgroup label="${t("allCurrencies")}">${ALL.filter(c => !common.includes(c)).map(opt).join("")}</optgroup>`;
-  sel.value = value || "USD";
+  return `<optgroup label="${t("common")}">${common.map(opt).join("")}</optgroup><optgroup label="${t("allCurrencies")}">${ALL.filter(c => !common.includes(c)).map(opt).join("")}</optgroup>`;
 }
+function fillCurrencySelect(sel, value) { sel.innerHTML = currencyOptions(); sel.value = value || "USD" }
 function fillAllCurrencySelects() { document.querySelectorAll(".currency-select").forEach(s => fillCurrencySelect(s, s.value)) }
 
 // ---------- exchange rates ----------
@@ -106,14 +124,44 @@ export function settle(b) {
 }
 
 // ---------- UI helpers ----------
-function status(msg, warn) { $("statusBanner").hidden = !msg; $("statusBanner").classList.toggle("warn", !!warn); $("statusText").textContent = msg || "" }
+function status(msg, warn) { $("statusBanner").hidden = !msg; $("statusText").textContent = msg || "" }
 let toastT;
-function toast(msg) { const t = $("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 2200) }
+function toast(msg) { const el = $("toast"); el.textContent = msg; el.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => el.hidden = true, 2200) }
 async function act(fn) {
-  try { const r = await fn(); status(""); return r }
-  catch (e) { console.error(e); status(t("saveFail"), true) }
+  try { const r = await fn(); status(""); return r ?? true }
+  catch (e) { console.error(e); status(t("saveFail"), true); return false }
 }
-function show(view) { for (const v of ["startView", "joinView", "groupView"]) $(v).hidden = v !== view }
+function show(view) {
+  const inGroup = view === "group";
+  $("barStart").hidden = inGroup; $("barGroup").hidden = !inGroup;
+  $("startView").hidden = view !== "start";
+  $("joinView").hidden = view !== "join";
+  $("tabAdd").hidden = !(inGroup && tab === "add");
+  $("tabBalances").hidden = !(inGroup && tab === "balances");
+  $("tabbar").hidden = !inGroup;
+  document.body.classList.toggle("has-tabs", inGroup);
+  $("tabBtnAdd").classList.toggle("on", tab === "add");
+  $("tabBtnBal").classList.toggle("on", tab === "balances");
+}
+const groupLink = () => location.href.split("#")[0].split("?")[0] + "#" + S.id;
+async function copyText(text, okMsg) {
+  try { await navigator.clipboard.writeText(text); toast(okMsg); return true }
+  catch { prompt(t("copyPrompt"), text); return false }
+}
+
+// ---------- sheets ----------
+let sheetName = null, sheetRender = null;
+function openSheet(name, renderFn) {
+  sheetName = name; sheetRender = renderFn;
+  $("sheetWrap").hidden = false; document.body.classList.add("sheet-open");
+  renderFn($("sheet"));
+}
+function closeSheet() { sheetName = null; sheetRender = null; $("sheetWrap").hidden = true; $("sheet").innerHTML = ""; document.body.classList.remove("sheet-open") }
+function refreshSheet() { if (sheetRender) sheetRender($("sheet")) }
+$("sheetWrap").addEventListener("click", e => { if (e.target === $("sheetWrap")) closeSheet() });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && sheetName) closeSheet() });
+const sheetHead = title => `<div class="sheet-head"><h2>${esc(title)}</h2><button class="link" data-close type="button">${t("close")}</button></div>`;
+function wireClose(el) { el.querySelectorAll("[data-close]").forEach(b => b.onclick = closeSheet) }
 
 // ---------- per-user group list ----------
 const userGroupsCol = u => collection(db, "users", u, "groups");
@@ -127,16 +175,30 @@ async function indexGroup(personId) {
 async function myGroups(u = uid) {
   try { return (await getDocs(userGroupsCol(u))).docs.map(d => ({ id: d.id, ...d.data() })) } catch { return [] }
 }
+async function allMyGroups() {
+  const local = store.get("settleup.recent", []);
+  const remote = await myGroups();
+  const seen = new Set(), list = [];
+  for (const g of [...remote.sort((a, b) => (b.openedAt || 0) - (a.openedAt || 0)), ...local]) {
+    if (!seen.has(g.id)) { seen.add(g.id); list.push(g) }
+  }
+  return list;
+}
+function forgetGroup(gid) {
+  store.set("settleup.recent", store.get("settleup.recent", []).filter(g => g.id !== gid));
+  if (store.get("settleup.last", null) === gid) store.del("settleup.last");
+}
 
 // ---------- routing ----------
 const groupIdFromHash = () => (location.hash.match(/^#([A-Za-z0-9]{16,40})$/) || [])[1] || null;
 window.addEventListener("hashchange", route);
-$("homeLink").onclick = e => { e.preventDefault(); session.set("settleup.stayHome", "1"); location.hash = "" };
+function goHome() { session.set("settleup.stayHome", "1"); location.hash = "" }
 
 function route() {
   if (!uid) return;
   unsubs.forEach(u => u()); unsubs = [];
   forceJoin = false; selectedPerson = null;
+  if (sheetName && sheetName !== "signin") closeSheet();
   const gid = groupIdFromHash();
   if (!gid) {
     const last = store.get("settleup.last", null);
@@ -149,19 +211,18 @@ function route() {
 
 async function showStart() {
   S = blankGroup(null);
-  show("startView");
+  show("start");
   document.title = "Settle Up";
   renderAccount();
-  const local = store.get("settleup.recent", []);
-  const remote = await myGroups();
-  const seen = new Set(); const list = [];
-  for (const g of [...remote.sort((a, b) => (b.openedAt || 0) - (a.openedAt || 0)), ...local]) {
-    if (!seen.has(g.id)) { seen.add(g.id); list.push(g) }
-  }
-  if (S.id) return; // user navigated into a group meanwhile
-  $("recentCard").hidden = !list.length;
-  $("recent").innerHTML = list.map(g => `<a href="#${esc(g.id)}">${esc(g.name || t("groupFallback"))}</a>`).join("");
+  const list = await allMyGroups();
+  if (S.id) return;
+  $("groupsCard").hidden = !list.length;
+  $("groupSel").innerHTML = list.map(g => `<option value="${esc(g.id)}">${esc(g.name || t("groupFallback"))}</option>`).join("");
+  if (!list.length) $("createForm").hidden = false;
+  $("newGroupBtn").hidden = !list.length;
 }
+$("openGroupBtn").onclick = () => { const id = $("groupSel").value; if (id) location.hash = id };
+$("newGroupBtn").onclick = () => { $("createForm").hidden = !$("createForm").hidden; if (!$("createForm").hidden) $("groupName").focus() };
 function rememberGroup() {
   const recent = store.get("settleup.recent", []).filter(g => g.id !== S.id);
   recent.unshift({ id: S.id, name: S.name });
@@ -170,9 +231,66 @@ function rememberGroup() {
 
 // ---------- accounts ----------
 function renderAccount() {
-  $("acctOut").hidden = !!account; $("acctIn").hidden = !account;
-  if (account) $("acctEmail").textContent = account.email || account.displayName || t("acctFallback");
-  $("acctErr").textContent = "";
+  $("acctBtn").textContent = account ? t("accountShort") : t("signInShort");
+  $("acctNote").innerHTML = account
+    ? esc(t("signedInNote", { email: account.email || account.displayName || t("acctFallback") }))
+    : `${esc(t("notSignedInNote"))} <button class="link" type="button" id="acctNoteBtn">${esc(t("signInShort"))}</button>`;
+  const b = $("acctNoteBtn"); if (b) b.onclick = openSignIn;
+  if (sheetName === "signin") refreshSheet();
+}
+$("acctBtn").onclick = () => openSignIn();
+
+let signinState = { mode: "choose", err: "" };   // choose | email | sent | finish
+let pendingLink = null;
+function openSignIn(mode) {
+  signinState = { mode: mode || "choose", err: "" };
+  openSheet("signin", el => {
+    if (account) {
+      el.innerHTML = `${sheetHead(t("accountRow"))}
+        <p style="margin:0">${esc(t("signedInAs"))} <strong>${esc(account.email || account.displayName || t("acctFallback"))}</strong></p>
+        <p class="hint">${esc(t("savedToAccount"))}</p>
+        <button class="btn ghost wide" id="signOutBtn" type="button">${esc(t("signOut"))}</button>`;
+      wireClose(el);
+      $("signOutBtn").onclick = async () => { store.del("settleup.last"); store.del("settleup.recent"); closeSheet(); await signOut(auth) };
+      return;
+    }
+    const m = signinState.mode;
+    el.innerHTML = `${sheetHead(m === "finish" ? t("finishSignIn") : t("keepGroups"))}
+      ${m === "choose" ? `<p class="hint">${esc(t("keepGroupsHint"))}</p>
+        <button class="btn ghost wide" id="googleBtn" type="button">${ICON.google} ${esc(t("google"))}</button>
+        <button class="btn ghost wide" id="emailBtn" type="button">${ICON.mail} ${esc(t("emailMe"))}</button>
+        <button class="link" data-close type="button" style="align-self:center">${esc(t("notNow"))}</button>` : ""}
+      ${m === "email" ? `<form id="emailForm" class="inline" novalidate><input id="emailInput" type="email" inputmode="email" autocomplete="email" placeholder="you@example.com"><button class="btn primary" type="submit">${esc(t("sendLink"))}</button></form>` : ""}
+      ${m === "sent" ? `<p class="hint">${esc(t("emailSent", { email: store.get("settleup.signinEmail", "") }))}</p>
+        <label class="field"><span>${esc(t("pasteHint"))}</span><span class="inline"><input id="pasteLink" placeholder="${esc(t("pastePh"))}" autocomplete="off"><button class="btn primary" id="pasteBtn" type="button">${esc(t("signIn"))}</button></span></label>` : ""}
+      ${m === "finish" ? `<p class="hint">${esc(t("finishHint"))}</p>
+        <form id="finishForm" class="inline" novalidate><input id="finishEmail" type="email" inputmode="email" autocomplete="email" placeholder="you@example.com"><button class="btn primary" type="submit">${esc(t("signIn"))}</button></form>` : ""}
+      <p class="err" id="acctErr">${esc(signinState.err)}</p>`;
+    wireClose(el);
+    const err = msg => { signinState.err = msg; $("acctErr").textContent = msg };
+    if (m === "choose") {
+      $("googleBtn").onclick = () => signInWith(() => signInWithPopup(auth, new GoogleAuthProvider())).then(closeSheet).catch(e => {
+        console.error(e); if (e.code !== "auth/popup-closed-by-user" && e.code !== "auth/cancelled-popup-request") err(t("googleFail"));
+      });
+      $("emailBtn").onclick = () => { signinState.mode = "email"; refreshSheet(); $("emailInput").focus() };
+    }
+    if (m === "email") $("emailForm").onsubmit = async e => {
+      e.preventDefault();
+      const email = $("emailInput").value.trim();
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return err(t("invalidEmail"));
+      try {
+        await sendSignInLinkToEmail(auth, email, { url: location.origin + location.pathname + "?signin=1", handleCodeInApp: true });
+        store.set("settleup.signinEmail", email);
+        signinState = { mode: "sent", err: "" }; refreshSheet();
+      } catch (x) { console.error(x); err(t("emailFail")) }
+    };
+    if (m === "sent") $("pasteBtn").onclick = () => {
+      const link = $("pasteLink").value.trim();
+      if (!isSignInWithEmailLink(auth, link)) return err(t("notLink"));
+      finishEmail(link);
+    };
+    if (m === "finish") $("finishForm").onsubmit = e => { e.preventDefault(); const em = $("finishEmail").value.trim(); if (em && pendingLink) finishEmail(pendingLink, em) };
+  });
 }
 // Sign in with an account, then move this device's group names over to it
 async function signInWith(doSignIn) {
@@ -180,10 +298,9 @@ async function signInWith(doSignIn) {
   migrating = true;
   try {
     const cred = await doSignIn();
-    const newUid = cred.user.uid;
-    if (newUid !== oldUid) await migrate(oldGroups, oldUid, newUid);
+    if (cred.user.uid !== oldUid) await migrate(oldGroups, oldUid, cred.user.uid);
     toast(t("signedInToast"));
-  } finally { migrating = false; uid = auth.currentUser?.uid || uid; route() }
+  } finally { migrating = false; uid = auth.currentUser?.uid || uid; account = auth.currentUser && !auth.currentUser.isAnonymous ? auth.currentUser : null; renderAccount(); route() }
 }
 async function migrate(groups, oldUid, newUid) {
   for (const g of groups) {
@@ -191,7 +308,7 @@ async function migrate(groups, oldUid, newUid) {
       if (!g.personId) continue;
       const pref = doc(db, "groups", g.id, "people", g.personId);
       const p = await getDoc(pref);
-      if (!p.exists() || p.data().uid !== oldUid) continue;   // someone else holds this name now
+      if (!p.exists() || p.data().uid !== oldUid) continue;
       const b = writeBatch(db);
       b.update(pref, { uid: newUid });
       b.set(doc(db, "groups", g.id, "members", newUid), { personId: g.personId });
@@ -200,41 +317,17 @@ async function migrate(groups, oldUid, newUid) {
     } catch (e) { console.warn("migrate", g.id, e) }
   }
 }
-$("googleBtn").onclick = () => signInWith(() => signInWithPopup(auth, new GoogleAuthProvider())).catch(e => {
-  console.error(e);
-  $("acctErr").textContent = e.code === "auth/popup-closed-by-user" ? "" : t("googleFail");
-});
-$("emailToggle").onclick = () => { $("emailForm").hidden = !$("emailForm").hidden; if (!$("emailForm").hidden) $("emailInput").focus() };
-$("emailForm").addEventListener("submit", async e => {
-  e.preventDefault();
-  const email = $("emailInput").value.trim();
-  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return $("acctErr").textContent = t("invalidEmail");
-  try {
-    await sendSignInLinkToEmail(auth, email, { url: location.origin + location.pathname + "?signin=1", handleCodeInApp: true });
-    store.set("settleup.signinEmail", email);
-    $("emailForm").hidden = true; $("emailSent").hidden = false; $("acctErr").textContent = "";
-    $("emailSentText").textContent = t("emailSent", { email });
-  } catch (err) { console.error(err); $("acctErr").textContent = t("emailFail") }
-});
-$("pasteBtn").onclick = () => {
-  const link = $("pasteLink").value.trim();
-  if (!isSignInWithEmailLink(auth, link)) return $("acctErr").textContent = t("notLink");
-  finishEmail(link);
-};
 async function finishEmail(link, email = store.get("settleup.signinEmail", "")) {
-  if (!email) { pendingLink = link; $("finishForm").hidden = false; show("startView"); return }
+  if (!email) { pendingLink = link; openSignIn("finish"); return }
   try {
     await signInWith(() => signInWithEmailLink(auth, email, link));
-    store.del("settleup.signinEmail"); $("finishForm").hidden = true; $("emailSent").hidden = true;
+    store.del("settleup.signinEmail"); closeSheet();
   } catch (e) {
     console.error(e);
-    $("acctErr").textContent = e.code === "auth/invalid-action-code" ? t("linkExpired") : t("linkFail");
+    signinState.err = e.code === "auth/invalid-action-code" ? t("linkExpired") : t("linkFail");
+    if (!sheetName) openSignIn(signinState.mode); else refreshSheet();
   }
 }
-let pendingLink = null;
-$("finishForm").addEventListener("submit", e => { e.preventDefault(); const em = $("finishEmail").value.trim(); if (em && pendingLink) finishEmail(pendingLink, em) });
-$("signOutBtn").onclick = async () => { store.del("settleup.last"); store.del("settleup.recent"); await signOut(auth) };
-$("saveGroupsBtn").onclick = () => { session.set("settleup.stayHome", "1"); location.hash = ""; setTimeout(() => $("accountCard").scrollIntoView({ behavior: "smooth" }), 300) };
 
 // ---------- create group ----------
 $("createForm").addEventListener("submit", async e => {
@@ -253,7 +346,8 @@ $("createForm").addEventListener("submit", async e => {
     b.set(doc(gref, "members", uid), { personId: pref.id });
     b.set(doc(userGroupsCol(uid), gref.id), { name, personId: pref.id, openedAt: Date.now() });
     await b.commit();
-    $("groupName").value = ""; $("founderName").value = "";
+    $("groupName").value = ""; $("founderName").value = ""; $("createForm").hidden = true;
+    tab = "add";
     location.hash = gref.id;
     setTimeout(() => toast(t("createdToast")), 400);
   } catch (e2) { console.error(e2); err.textContent = t("createFail") }
@@ -265,11 +359,12 @@ async function openGroup(gid) {
   const gref = doc(db, "groups", gid);
   try {
     const snap = await getDoc(gref);
-    if (!snap.exists()) { store.del("settleup.last"); session.set("settleup.stayHome", "1"); location.hash = ""; status(t("badLink"), true); return }
+    if (!snap.exists()) { forgetGroup(gid); goHome(); status(t("badLink"), true); return }
   } catch (e) { status(t("loadFail"), true); return }
   if (S.id !== gid) return;
-  const onErr = e => { console.error(e); status(t("offline"), true) };
+  const onErr = e => { console.error(e); if (S.id === gid) status(t("offline"), true) };
   unsubs.push(onSnapshot(gref, s => {
+    if (!s.exists()) { if (S.id === gid) { forgetGroup(gid); goHome(); toast(t("deletedToast")) } return }
     const d = s.data() || {}; S.name = d.name || t("groupFallback"); S.currency = d.currency || "USD"; S.legacy = !d.createdBy;
     document.title = S.name + " · Settle Up"; rememberGroup(); update();
   }, onErr));
@@ -283,10 +378,11 @@ async function openGroup(gid) {
 }
 
 function update() {
-  if (!S.id || !S.loaded.people || migrating) return;
+  if (!S.id || !S.loaded.people || migrating || deleting) return;
   const m = me();
-  if (!m || forceJoin) { renderJoin(); show("joinView") }
-  else { show("groupView"); render(); indexGroup(m.id) }
+  if (!m || forceJoin) { renderJoin(); show("join") }
+  else { show("group"); render(); indexGroup(m.id) }
+  if (["people", "settings", "share"].includes(sheetName)) refreshSheet();
 }
 
 // ---------- join ----------
@@ -306,7 +402,6 @@ function renderJoin() {
     armed = null; joinAs(p.id, p.name);
   });
 }
-// Become person `pid` in this group (creating them when `create` is set), releasing any name held before
 async function joinAs(pid, name, create = false) {
   const old = me();
   const ok = await act(async () => {
@@ -319,7 +414,6 @@ async function joinAs(pid, name, create = false) {
     b.set(doc(db, "groups", S.id, "members", uid), { personId: pref.id });
     b.set(doc(userGroupsCol(uid), S.id), { name: S.name, personId: pref.id, openedAt: Date.now() });
     await b.commit();
-    return true;
   });
   if (ok) { forceJoin = false; toast(t("welcome", { name })); update() }
 }
@@ -332,8 +426,7 @@ $("joinNewBtn").onclick = () => {
   joinAs(null, n, true);
 };
 $("joinName").onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); $("joinNewBtn").click() } };
-$("notMe").onclick = () => { forceJoin = true; armed = null; update() };
-$("joinBack").onclick = e => { e.preventDefault(); forceJoin = false; armed = null; update() };
+$("joinBack").onclick = () => { forceJoin = false; armed = null; update() };
 
 // ---------- actions ----------
 const gcol = name => collection(db, "groups", S.id, name);
@@ -346,19 +439,125 @@ const api = {
   updateGroup: data => updateDoc(doc(db, "groups", S.id), data),
 };
 
-// ---------- admin ----------
+// ---------- top bar ----------
+$("switchBtn").onclick = () => openSheet("switch", async el => {
+  el.innerHTML = `${sheetHead(t("switchGroup"))}<div class="menu" id="gList"><p class="hint">…</p></div>
+    <button class="btn ghost wide" id="toHome" type="button">${esc(t("allGroupsNew"))}</button>`;
+  wireClose(el);
+  $("toHome").onclick = () => { closeSheet(); goHome() };
+  const list = await allMyGroups();
+  if (sheetName !== "switch") return;
+  $("gList").innerHTML = list.map(g => `<button class="mi" type="button" data-g="${esc(g.id)}">${g.id === S.id ? ICON.check : ICON.users}<span>${esc(g.name || t("groupFallback"))}</span>${g.id === S.id ? `<span class="side">${esc(t("current"))}</span>` : ""}</button>`).join("");
+  $("gList").querySelectorAll("[data-g]").forEach(b => b.onclick = () => { closeSheet(); if (b.dataset.g !== S.id) { tab = "add"; location.hash = b.dataset.g } });
+});
+async function shareInvite() {
+  const url = groupLink();
+  if (navigator.share) { try { await navigator.share({ title: S.name, text: t("inviteText", { name: S.name, url: "" }).trim(), url }); return } catch (e) { if (e.name === "AbortError") return } }
+  copyText(url, t("copied"));
+}
+$("inviteBtn").onclick = shareInvite;
+$("menuBtn").onclick = openSettings;
+document.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => { tab = b.dataset.tab; show("group"); window.scrollTo({ top: 0 }) });
+
+// ---------- settings sheet ----------
+function openSettings() {
+  openSheet("settings", el => {
+    const editGroup = canEditGroup();
+    el.innerHTML = `${sheetHead(t("groupSettings"))}<div class="menu">
+      <button class="mi" type="button" id="mInvite">${ICON.link}<span>${esc(t("copyInviteRow"))}</span></button>
+      <button class="mi" type="button" id="mPeople">${ICON.users}<span>${esc(t("peopleAdmins"))}</span><span class="side">${S.people.length}</span></button>
+      ${editGroup ? `<button class="mi" type="button" id="mRename">${ICON.edit}<span>${esc(t("rename"))}</span></button>` : ""}
+      <button class="mi" type="button" id="mCurrency">${ICON.money}<span>${esc(t("homeCurrencyRow", { c: S.currency }))}</span></button>
+      <div class="mi">${ICON.globe}<span>${esc(t("languageRow"))}</span><select id="mLang" aria-label="${esc(t("languageRow"))}"><option value="en">English</option><option value="zh-Hant">繁體中文</option></select></div>
+      <button class="mi" type="button" id="mAcct">${ICON.user}<span>${esc(t("accountRow"))}</span><span class="side">${esc(account ? (account.email || t("acctFallback")) : t("signInShort"))}</span></button>
+      <button class="mi" type="button" id="mSwitch">${ICON.swap}<span>${esc(t("switchName"))}</span></button>
+      ${canDeleteGroup() ? `<button class="mi danger" type="button" id="mDelete">${ICON.trash}<span>${esc(t("deleteGroup"))}</span><span class="side">${esc(t("adminsOnly"))}</span></button>` : ""}
+    </div>`;
+    wireClose(el);
+    $("mInvite").onclick = () => { closeSheet(); copyText(groupLink(), t("copied")) };
+    $("mPeople").onclick = openPeople;
+    if ($("mRename")) $("mRename").onclick = openRename;
+    $("mCurrency").onclick = openCurrency;
+    $("mLang").value = lang;
+    $("mLang").onchange = e => { setLang(e.target.value); applyLanguage(); refreshSheet() };
+    $("mAcct").onclick = () => openSignIn();
+    $("mSwitch").onclick = () => { closeSheet(); forceJoin = true; armed = null; update() };
+    if ($("mDelete")) $("mDelete").onclick = openDelete;
+  });
+}
+
+function openRename() {
+  openSheet("rename", el => {
+    el.innerHTML = `${sheetHead(t("rename"))}
+      <form id="renameForm" class="inline" novalidate><input id="renameInput" maxlength="60" value="${esc(S.name)}"><button class="btn primary" type="submit">${esc(t("save"))}</button></form>`;
+    wireClose(el);
+    $("renameForm").onsubmit = async e => {
+      e.preventDefault();
+      const n = $("renameInput").value.trim();
+      if (n && n !== S.name) await act(() => api.updateGroup({ name: n }));
+      closeSheet();
+    };
+  });
+}
+
+function openCurrency() {
+  openSheet("currency", el => {
+    const locked = S.expenses.length > 0, can = canEditGroup();
+    el.innerHTML = `${sheetHead(t("homeCurrency"))}
+      <select id="curSel" ${locked || !can ? "disabled" : ""}>${currencyOptions()}</select>
+      <p class="hint">${esc(locked ? t("currencyLockedNote") : !can ? t("curAdminOnly") : t("homeCurrencyHint"))}</p>
+      ${!locked && can ? `<button class="btn primary wide" id="curSave" type="button">${esc(t("save"))}</button>` : ""}`;
+    wireClose(el);
+    $("curSel").value = S.currency;
+    if ($("curSave")) $("curSave").onclick = async () => {
+      const c = $("curSel").value;
+      if (c !== S.currency) { await act(() => api.updateGroup({ currency: c })); fx.cur = null; $("expCurrency").dataset.group = "" }
+      closeSheet();
+    };
+  });
+}
+
+// ---------- people sheet ----------
 let selectedPerson = null;
+function openPeople() {
+  openSheet("people", el => {
+    const mine = me(); if (!mine) return closeSheet();
+    const admin = amAdmin();
+    const chips = S.peopleDocs.map(p => {
+      const used = S.expenses.some(e => e.payer === p.name || e.split.includes(p.name));
+      const rm = !admin && !p.uid && !used ? `<button type="button" class="x" data-rm="${esc(p.id)}" aria-label="Remove ${esc(p.name)}">×</button>` : "";
+      const tag = p.id === mine.id ? t("youSuffix") : p.uid ? "" : t("invited");
+      return `<span class="chip${admin ? " selectable" : ""}${selectedPerson === p.id ? " selected" : ""}" ${admin ? `data-sel="${esc(p.id)}" role="button" tabindex="0"` : ""}>${esc(p.name)}${p.role === "admin" ? ` <span class="badge">${t("admin")}</span>` : ""}<span class="tagtxt">${tag}</span>${rm}</span>`;
+    }).join("");
+    el.innerHTML = `${sheetHead(t("peopleAdmins"))}
+      <div class="chips">${chips}</div>
+      <div id="adminPanel" class="admin-panel" hidden></div>
+      <p class="hint">${esc(admin ? t("peopleHintAdmin") : t("peopleHintMember"))}</p>
+      <form class="inline" id="addPersonForm" novalidate><input id="newPerson" placeholder="${esc(t("addFriendPh"))}" maxlength="24" autocomplete="off"><button class="btn primary" type="submit">${esc(t("add"))}</button></form>
+      <p class="err" id="personErr"></p>`;
+    wireClose(el);
+    el.querySelectorAll("[data-rm]").forEach(b => b.onclick = e => { e.stopPropagation(); act(() => api.removePerson(b.dataset.rm)) });
+    el.querySelectorAll("[data-sel]").forEach(c => c.onclick = () => { selectedPerson = selectedPerson === c.dataset.sel ? null : c.dataset.sel; refreshSheet() });
+    $("addPersonForm").onsubmit = e => {
+      e.preventDefault();
+      const n = $("newPerson").value.trim(), err = $("personErr");
+      if (!n) return err.textContent = t("errNameFirst");
+      if (S.people.some(p => p.toLowerCase() === n.toLowerCase())) return err.textContent = t("errOnList", { name: n });
+      err.textContent = ""; $("newPerson").value = ""; act(() => api.addPerson(n));
+    };
+    renderAdminPanel();
+  });
+}
 function renderAdminPanel() {
-  const panel = $("adminPanel"), p = S.peopleDocs.find(x => x.id === selectedPerson);
+  const panel = $("adminPanel"); if (!panel) return;
+  const p = S.peopleDocs.find(x => x.id === selectedPerson);
   if (!amAdmin() || !p) { panel.hidden = true; return }
   const mine = me(), isMe = p.id === mine.id;
   const used = S.expenses.some(e => e.payer === p.name || e.split.includes(p.name));
   const admins = S.peopleDocs.filter(x => x.role === "admin").length;
   const acts = [];
-  {
-    if (p.role !== "admin") acts.push(`<button class="btn small ghost" data-adm="promote" type="button">${t("makeAdmin")}</button>`);
-    else if (!(isMe && admins <= 1)) acts.push(`<button class="btn small ghost" data-adm="demote" type="button">${t("removeAdmin")}</button>`);
-  }
+  if (p.role !== "admin") acts.push(`<button class="btn small ghost" data-adm="promote" type="button">${t("makeAdmin")}</button>`);
+  else if (!(isMe && admins <= 1)) acts.push(`<button class="btn small ghost" data-adm="demote" type="button">${t("removeAdmin")}</button>`);
   if (p.uid && !isMe) acts.push(`<button class="btn small ghost" data-adm="unlink" type="button">${t("unlink")}</button>`);
   if (!used && !isMe) acts.push(`<button class="btn small ghost" data-adm="remove" type="button">${t("removeFromGroup")}</button>`);
   panel.hidden = false;
@@ -367,36 +566,125 @@ function renderAdminPanel() {
     ${used ? `<p class="hint">${t("usedNote", { name: esc(p.name) })}</p>` : ""}`;
   panel.querySelectorAll("[data-adm]").forEach(b => b.onclick = () => {
     const a = b.dataset.adm;
-    if (a === "promote") act(() => api.updatePerson(p.id, { role: "admin" })).then(() => toast(t("promotedToast", { name: p.name })));
+    if (a === "promote") act(() => api.updatePerson(p.id, { role: "admin" })).then(ok => ok && toast(t("promotedToast", { name: p.name })));
     if (a === "demote") act(() => api.updatePerson(p.id, { role: "member" }));
-    if (a === "unlink") act(() => api.updatePerson(p.id, { uid: null })).then(() => toast(t("unlinkedToast", { name: p.name })));
+    if (a === "unlink") act(() => api.updatePerson(p.id, { uid: null })).then(ok => ok && toast(t("unlinkedToast", { name: p.name })));
     if (a === "remove") { if (b.dataset.armed) { selectedPerson = null; act(() => api.removePerson(p.id)) } else { b.dataset.armed = 1; b.textContent = t("tapAgainRemove") } }
   });
 }
-$("renameWrap").addEventListener("click", async e => {
-  if (e.target.id === "renameBtn") {
-    $("renameWrap").innerHTML = `<span class="inline"><input id="renameInput" maxlength="60" value="${esc(S.name)}"><button class="btn small primary" id="renameSave" type="button">${t("save")}</button></span>`;
-    $("renameInput").focus();
-  } else if (e.target.id === "renameSave") {
-    const n = $("renameInput").value.trim();
-    if (n && n !== S.name) await act(() => api.updateGroup({ name: n }));
-    $("renameWrap").innerHTML = `<button class="link" id="renameBtn" type="button">${t("rename")}</button>`;
+
+// ---------- delete group ----------
+let deleting = false;
+function openDelete() {
+  openSheet("delete", el => {
+    el.innerHTML = `${sheetHead(t("deleteTitle", { name: S.name }))}
+      <p class="hint">${esc(t("deleteHint"))}</p>
+      <p style="margin:0;font-weight:700">${esc(S.name)}</p>
+      <input id="delInput" autocomplete="off" placeholder="${esc(S.name)}">
+      <p class="err" id="delErr"></p>
+      <button class="btn danger wide" id="delBtn" type="button">${esc(t("deleteBtn"))}</button>`;
+    wireClose(el);
+    $("delBtn").onclick = async () => {
+      if ($("delInput").value.trim() !== S.name.trim()) return $("delErr").textContent = t("deleteMismatch");
+      $("delBtn").disabled = true; $("delBtn").textContent = t("deleting");
+      try { await deleteGroup(); }
+      catch (e) { console.error(e); deleting = false; $("delErr").textContent = t("deleteFail"); $("delBtn").disabled = false; $("delBtn").textContent = t("deleteBtn") }
+    };
+  });
+}
+async function commitInChunks(ops) {
+  for (let i = 0; i < ops.length; i += 400) {
+    const b = writeBatch(db);
+    ops.slice(i, i + 400).forEach(ref => b.delete(ref));
+    await b.commit();
   }
+}
+async function deleteGroup() {
+  const gid = S.id, mine = me();
+  const g = doc(db, "groups", gid);
+  const [exps, people, members] = await Promise.all(["expenses", "people", "members"].map(c => getDocs(collection(g, c))));
+  deleting = true;
+  // Order matters for the security rules: admin rights are checked against your own name, so it goes last
+  await commitInChunks(exps.docs.map(d => d.ref));
+  await commitInChunks([
+    ...people.docs.filter(d => d.id !== mine?.id).map(d => d.ref),
+    ...members.docs.filter(d => d.id !== uid).map(d => d.ref),
+  ]);
+  if (S.legacy) {
+    // Older groups without admins: remove your own name first, then the group
+    if (mine) await deleteDoc(doc(g, "people", mine.id));
+    await deleteDoc(doc(g, "members", uid)).catch(() => { });
+    await deleteDoc(g);
+  } else {
+    await deleteDoc(g);
+    if (mine) await deleteDoc(doc(g, "people", mine.id));
+    await deleteDoc(doc(g, "members", uid)).catch(() => { });
+  }
+  await deleteDoc(doc(userGroupsCol(uid), gid)).catch(() => { });
+  unsubs.forEach(u => u()); unsubs = [];
+  forgetGroup(gid);
+  deleting = false;
+  closeSheet(); toast(t("deletedToast")); goHome();
+}
+
+// ---------- share summary ----------
+function buildSummary(includeExpenses) {
+  const b = balances(S.people, S.expenses), tx = settle(b);
+  const total = S.expenses.filter(e => !e.payment).reduce((s, e) => s + e.cents, 0);
+  const lines = [t("sumTitle", { name: S.name }), t("sumTotal", { x: fmtMinor(total), n: S.people.length }), "", t("sumWho")];
+  if (tx.length) tx.forEach(x => lines.push(t("sumPays", { from: x.from, to: x.to, x: fmtMinor(x.cents) })));
+  else lines.push(t("sumEven"));
+  lines.push("", t("sumBalances"));
+  [...S.people].sort((a, c) => b[c] - b[a]).forEach(p => {
+    const v = b[p]; lines.push(`${p} ${v > 0 ? "+" : v < 0 ? "−" : ""}${fmtMinor(Math.abs(v))}`);
+  });
+  const exps = S.expenses.filter(e => !e.payment).sort((a, c) => (a.createdAt || 0) - (c.createdAt || 0));
+  if (includeExpenses && exps.length) {
+    lines.push("", t("sumExpenses"));
+    let anyFx = false;
+    exps.forEach(e => {
+      const fx = e.origCurrency && e.origCurrency !== S.currency;
+      if (fx) anyFx = true;
+      lines.push(t("sumExpLine", { desc: e.desc, x: fmtMinor(e.cents), orig: fx ? ` (${fmtAmount(e.origAmount, e.origCurrency)})` : "", payer: e.payer }));
+    });
+    if (anyFx) lines.push(t("sumFx"));
+  }
+  lines.push("", t("sumOpen", { url: groupLink() }));
+  return lines.join("\n");
+}
+let includeExp = store.get("settleup.sumExp", true);
+$("shareSumBtn").onclick = () => openSheet("share", el => {
+  const text = buildSummary(includeExp);
+  el.innerHTML = `${sheetHead(t("shareSummary"))}
+    <label class="toggle"><span>${esc(t("includeExpenses"))}</span><input type="checkbox" id="incExp" ${includeExp ? "checked" : ""}></label>
+    <pre class="msg" id="sumText">${esc(text)}</pre>
+    <div class="share-grid">
+      <a class="btn ghost" id="shWa" target="_blank" rel="noopener">${ICON.wa} ${esc(t("whatsapp"))}</a>
+      <button class="btn ghost" id="shSignal" type="button">${ICON.signal} ${esc(t("signal"))}</button>
+      <a class="btn ghost" id="shMail">${ICON.mail} ${esc(t("email"))}</a>
+      <button class="btn ghost" id="shMore" type="button">${ICON.more} ${esc(t("moreApps"))}</button>
+    </div>
+    <button class="btn primary wide" id="shCopy" type="button">${ICON.copy} ${esc(t("copyText"))}</button>
+    <p class="hint">${esc(t("shareNote"))}</p>`;
+  wireClose(el);
+  $("incExp").onchange = e => { includeExp = e.target.checked; store.set("settleup.sumExp", includeExp); refreshSheet() };
+  $("shWa").href = "https://wa.me/?text=" + encodeURIComponent(text);
+  $("shMail").href = "mailto:?subject=" + encodeURIComponent(t("sumTitle", { name: S.name }).replace(/\*/g, "")) + "&body=" + encodeURIComponent(text.replace(/\*/g, ""));
+  const nativeShare = async () => {
+    if (navigator.share) { try { await navigator.share({ text }); return } catch (e) { if (e.name === "AbortError") return } }
+    copyText(text, t("textCopied"));
+  };
+  $("shSignal").onclick = nativeShare;
+  $("shMore").onclick = nativeShare;
+  $("shCopy").onclick = () => copyText(text, t("textCopied"));
 });
 
 // ---------- render group ----------
 function render() {
   const mine = me(), myName = mine.name, admin = amAdmin();
   $("gName").textContent = S.name;
-  $("meName").textContent = myName;
-  $("adminTag").hidden = !(mine.role === "admin");
-  $("saveNudge").hidden = !!account;
-  $("currency").value = S.currency;
-  const editGroup = canEditGroup();
-  $("currency").disabled = S.expenses.length > 0 || !editGroup;
-  $("curNote").textContent = S.expenses.length ? t("curLocked") : !editGroup ? t("curAdminOnly") : "";
-  $("renameWrap").hidden = !editGroup;
 
+  // balances tab
   const b = balances(S.people, S.expenses), tx = settle(b);
   $("txCount").textContent = tx.length ? (tx.length > 1 ? t("payments", { n: tx.length }) : t("payment1")) : "";
   $("transfers").innerHTML = tx.length ? tx.map((x, k) => {
@@ -408,7 +696,6 @@ function render() {
     const x = tx[+btn.dataset.pay]; btn.disabled = true;
     act(() => api.addExpense({ desc: t("paymentDesc", { from: x.from, to: x.to }), cents: x.cents, payer: x.from, split: [x.to], payment: true }));
   });
-
   const total = S.expenses.filter(e => !e.payment).reduce((s, e) => s + e.cents, 0);
   $("total").textContent = total ? t("totalSpent", { x: fmtMinor(total) }) : "";
   const max = Math.max(1, ...Object.values(b).map(Math.abs));
@@ -416,23 +703,11 @@ function render() {
     const v = b[p], w = Math.abs(v) / max * 50, cls = v > 0 ? "pos" : v < 0 ? "neg" : "zero";
     const bar = v ? `<i style="${v > 0 ? "left:50%" : "right:50%"};width:${w}%;background:var(${v > 0 ? "--get" : "--owe"})"></i>` : "";
     const label = v > 0 ? t("gets", { x: fmtMinor(v) }) : v < 0 ? t("owes", { x: fmtMinor(-v) }) : t("even");
-    return `<div class="bal-row"><span class="name" title="${esc(p)}">${esc(p)}${p === myName ? t("youSuffix") : ""}</span><div class="bar">${bar}</div><span class="v num ${cls}">${label}</span></div>`;
+    return `<div class="bal-row"><span class="name" title="${esc(p)}">${esc(p)}${p === myName ? t("youSuffix") : ""}</span><div class="bar-track">${bar}</div><span class="v num ${cls}">${label}</span></div>`;
   }).join("") : `<p class="empty">${t("noOneHere")}</p>`;
+  $("shareSumBtn").hidden = !S.expenses.length;
 
-  // people chips: admins tap a name to manage it; others can remove invites nobody has joined as
-  $("people").innerHTML = S.peopleDocs.map(p => {
-    const used = S.expenses.some(e => e.payer === p.name || e.split.includes(p.name));
-    const rm = !admin && !p.uid && !used ? `<button type="button" data-rm="${esc(p.id)}" aria-label="Remove ${esc(p.name)}">×</button>` : "";
-    const tag = p.id === mine.id ? t("youSuffix") : p.uid ? "" : t("invited");
-    const cls = `chip${rm ? "" : " fixed"}${admin ? " selectable" : ""}${selectedPerson === p.id ? " selected" : ""}`;
-    return `<span class="${cls}" ${admin ? `data-sel="${esc(p.id)}" role="button" tabindex="0"` : ""}>${esc(p.name)}${p.role === "admin" ? ` <span class="badge">${t("admin")}</span>` : ""}<span class="tagtxt">${tag}</span>${rm}</span>`;
-  }).join("");
-  document.querySelectorAll("[data-rm]").forEach(btn => btn.onclick = () => act(() => api.removePerson(btn.dataset.rm)));
-  document.querySelectorAll("[data-sel]").forEach(c => c.onclick = () => { selectedPerson = selectedPerson === c.dataset.sel ? null : c.dataset.sel; render() });
-  $("peopleHint").textContent = admin ? t("peopleHintAdmin") : t("peopleHintMember");
-  renderAdminPanel();
-
-  // split options, keeping current choices
+  // add tab: split options, keeping current choices
   const prevSplit = new Set([...document.querySelectorAll("#splitOpts input:checked")].map(i => i.value));
   const known = new Set([...document.querySelectorAll("#splitOpts input")].map(i => i.value));
   $("splitOpts").innerHTML = S.people.map((p, i) => `<label><input type="checkbox" id="sp${i}" value="${esc(p)}" ${!known.has(p) || prevSplit.has(p) ? "checked" : ""}>${esc(p === myName ? p + t("youSuffix") : p)}</label>`).join("");
@@ -446,11 +721,11 @@ function render() {
     const meta = e.payment ? t("repayment") : e.split.length === S.people.length
       ? t("paidSplitAll", { payer: esc(e.payer), each })
       : t("paidSplitWith", { payer: esc(e.payer), names: e.split.map(esc).join(lang === "zh-Hant" ? "、" : ", "), each });
-    const fx = e.origCurrency && e.origCurrency !== S.currency ? `<span class="fxline num">${t("paidOrig", { amount: fmtAmount(e.origAmount, e.origCurrency), from: e.origCurrency, rate: niceRate(e.rate), to: S.currency })}</span>` : "";
+    const fxl = e.origCurrency && e.origCurrency !== S.currency ? `<span class="fxline num">${t("paidOrig", { amount: fmtAmount(e.origAmount, e.origCurrency), from: e.origCurrency, rate: niceRate(e.rate), to: S.currency })}</span>` : "";
     const when = e.createdAt ? new Date(e.createdAt).toLocaleDateString(locale(), { month: "short", day: "numeric" }) : "";
     const by = [e.addedByName ? t("addedBy", { name: esc(e.addedByName) }) : "", when].filter(Boolean).join(" · ");
     const canDelete = !e.addedBy || e.addedBy === mine.id || admin;
-    return `<div class="exp"><span class="d">${esc(e.desc)}</span><span class="a num">${fmtMinor(e.cents)}</span><span class="meta">${meta}</span>${canDelete ? `<button class="link danger del" type="button" data-del="${esc(e.id)}">${t("del")}</button>` : "<span></span>"}${fx}${by ? `<span class="by">${by}</span>` : ""}</div>`;
+    return `<div class="exp"><span class="d">${esc(e.desc)}</span><span class="a num">${fmtMinor(e.cents)}</span><span class="meta">${meta}</span>${canDelete ? `<button class="link danger del" type="button" data-del="${esc(e.id)}">${t("del")}</button>` : "<span></span>"}${fxl}${by ? `<span class="by">${by}</span>` : ""}</div>`;
   }).join("") : `<p class="empty">${t("noExpenses")}</p>`;
   document.querySelectorAll("[data-del]").forEach(btn => {
     btn.onclick = () => {
@@ -524,24 +799,7 @@ function preview() {
   const conv = c !== S.currency ? `${fmtAmount(amt, c)} = ${fmtMinor(cents)}` : fmtMinor(cents);
   $("preview").textContent = s.length ? t("previewEach", { conv, n: s.length, x: fmtMinor(Math.round(cents / s.length)) }) : conv;
 }
-
-// ---------- wiring ----------
 $("amount").oninput = preview;
-$("currency").onchange = e => act(() => api.updateGroup({ currency: e.target.value })).then(() => { fx.cur = null; $("expCurrency").dataset.group = "" });
-$("shareBtn").onclick = async () => {
-  const link = location.href.split("#")[0].split("?")[0] + "#" + S.id;
-  if (navigator.share) { try { await navigator.share({ title: S.name, text: t("shareText", { name: S.name }), url: link }); return } catch { } }
-  try { await navigator.clipboard.writeText(link); toast(t("copied")) }
-  catch { prompt(t("copyPrompt"), link) }
-};
-function addPerson() {
-  const n = $("newPerson").value.trim(), err = $("personErr");
-  if (!n) return err.textContent = t("errNameFirst");
-  if (S.people.some(p => p.toLowerCase() === n.toLowerCase())) return err.textContent = t("errOnList", { name: n });
-  err.textContent = ""; $("newPerson").value = ""; act(() => api.addPerson(n));
-}
-$("addPerson").onclick = addPerson;
-$("newPerson").onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); addPerson() } };
 $("selAll").onclick = () => { document.querySelectorAll("#splitOpts input").forEach(i => i.checked = true); preview() };
 $("selNone").onclick = () => { document.querySelectorAll("#splitOpts input").forEach(i => i.checked = false); preview() };
 $("expForm").addEventListener("submit", e => {
@@ -555,6 +813,7 @@ $("expForm").addEventListener("submit", e => {
   const entry = { desc, cents, payer: me().name, split };
   if (c !== S.currency) Object.assign(entry, { origAmount: amt, origCurrency: c, rate: fx.rate });
   err.textContent = ""; $("desc").value = ""; $("amount").value = ""; preview();
+  document.activeElement?.blur();
   act(() => api.addExpense(entry));
   toast(t("addedToast"));
 });
@@ -564,9 +823,11 @@ function applyLanguage() {
   applyStatic();
   fillAllCurrencySelects();
   $("langSel").value = lang;
-  if (S.id && !$("groupView").hidden) render();
-  else if (S.id && !$("joinView").hidden) renderJoin();
-  if (!$("emailSent").hidden) $("emailSentText").textContent = t("emailSent", { email: store.get("settleup.signinEmail", "") });
+  $("inviteBtn").setAttribute("aria-label", t("copyInviteRow"));
+  $("menuBtn").setAttribute("aria-label", t("groupSettings"));
+  if (S.id && me() && !forceJoin) render();
+  else if (S.id && S.loaded.people) renderJoin();
+  if (uid) renderAccount();
 }
 $("langSel").onchange = e => { setLang(e.target.value); applyLanguage() };
 applyLanguage();
@@ -589,7 +850,6 @@ async function boot() {
     renderAccount();
     if (changed && !migrating) { indexGroup.last = null; route() }
   });
-  // Arriving from an email sign-in link
   if (isSignInWithEmailLink(auth, location.href)) {
     const link = location.href;
     history.replaceState(null, "", location.pathname);
@@ -603,6 +863,7 @@ async function boot() {
 if (!firebaseConfig || !firebaseConfig.apiKey || firebaseConfig.apiKey.startsWith("PASTE")) {
   status(t("setupNeeded"), true);
 } else boot();
+
 // Block pinch-zoom on iOS Safari, which ignores user-scalable=no
 document.addEventListener("gesturestart", e => e.preventDefault(), { passive: false });
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => { });

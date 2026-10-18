@@ -61,11 +61,15 @@ On iPhone, an email link opens in Safari. If you're using the home-screen app, c
 
 ## Admins
 
-Whoever creates a group is its admin. Admins can tap any name under **People** to make someone else an admin, unlink a name from a device (so that person can pick it again), or remove someone who isn't on any expenses. Admins can also delete any expense, rename the group, and set the home currency before the first expense. Groups created before this update don't have an admin, so start a new group to get one.
+Whoever creates a group is its admin. In **⋯ Group settings → People and admins**, admins can tap any name to make someone else an admin, unlink a name from a device (so that person can pick it again), or remove someone who isn't on any expenses. Admins can also delete any expense, rename the group, set the home currency before the first expense, and delete the whole group (**⋯ → Delete group**, confirmed by typing the group name). Groups created before this update don't have an admin, so start a new group to get one.
 
 ## Languages
 
 The app comes in English and Traditional Chinese (繁體中文). It picks the phone's language automatically, and anyone can switch with the picker at the top right. To add another language, copy the `en` block in `i18n.js`, translate the values, and add it to the picker in `index.html`.
+
+## Sharing a summary
+
+On the **Balances** tab, **Share summary** creates a message with who pays whom, everyone's balance and (optionally) the full expense list. WhatsApp and Email open with the message filled in. Signal and More apps open the phone's share sheet. Copy text works everywhere.
 
 ## Trips abroad
 
