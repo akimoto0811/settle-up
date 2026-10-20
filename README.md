@@ -69,7 +69,7 @@ The app comes in English and Traditional Chinese (繁體中文). It picks the ph
 
 ## Layout
 
-Inside a group, **Home** shows your overall balance in the green card, with one-tap **Mark paid** / **Mark received** for your payments, everyone's balance as avatars, and recent expenses. **Activity** lists everything by day, with filters. The round **+** button opens the full-screen Add expense form. Tap any expense for details (and Delete), or any avatar for that person's Paid / Share / Net.
+Inside a group, **Home** shows your overall balance in the green card, with one-tap **Mark paid** / **Mark received** for your payments, everyone's balance as avatars, and recent expenses. **Activity** lists everything by day, with filters. The round **+** button opens the full-screen Add expense form. Tap any expense for details, **Edit** (amount, currency, description, who's in the split) and **Delete**, or any avatar for that person's Paid / Share / Net.
 
 ## Sharing a summary
 
@@ -87,7 +87,8 @@ The home currency can only be changed before the first expense is added.
 - Groups you've opened are kept on your phone, so they open instantly and you can look at them offline.
 
 - Each device joins as one person. On iPhone, the home-screen app and Safari count as separate devices, so after adding it to the home screen you'll pick your name once more. Your name will show "joined on another device." Tap it twice to move it to this device.
-- You can only delete expenses you added yourself.
+- You can only edit or delete expenses you added yourself (admins can edit or delete any).
+- When adding or editing, choose **Equally** to split evenly, or **Exact amounts** to type what each person owes. The amounts must add up to the total.
 - The group link works like a key. Anyone who has it can add or delete expenses, so only share it with the group.
 - Firebase's free plan covers far more than a friend group will use (50,000 reads and 20,000 writes a day).
 - To change the app later, edit the files and upload them to the repo again. Phones pick up the new version the next time they open it.

@@ -149,7 +149,7 @@
   <form id="expForm" class="add-form" novalidate>
     <div class="add-head">
       <button class="icon-btn" type="button" id="addClose" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-      <h2 data-i18n="addExpenseTitle">Add expense</h2>
+      <h2 id="addTitle">Add expense</h2>
       <span style="width:40px"></span>
     </div>
     <div class="amount-hero">
@@ -166,12 +166,21 @@
       </div>
     </div>
     <label class="field-row"><span class="cat-icon" id="descIcon"></span><input id="desc" data-i18n-ph="whatForPh" placeholder="Dinner, taxi, groceries…" maxlength="60" autocomplete="off"></label>
-    <div class="field-row static"><span class="muted" data-i18n="paidBy">Paid by</span><span class="right" data-i18n="you">You</span></div>
-    <div class="split-head"><span data-i18n="splitEqually">Split equally</span><span><button type="button" class="link" id="selAll" data-i18n="all">All</button> · <button type="button" class="link" id="selNone" data-i18n="none">None</button></span></div>
-    <div class="split-opts" id="splitOpts"></div>
+    <div class="field-row static"><span class="muted" data-i18n="paidBy">Paid by</span><span class="right" id="paidByVal">You</span></div>
+    <div class="seg" id="splitMode" role="tablist">
+      <button type="button" data-m="equal" class="on" data-i18n="splitEqual">Equally</button>
+      <button type="button" data-m="exact" data-i18n="splitExact">Exact amounts</button>
+    </div>
+    <div id="equalBox">
+      <div class="split-head"><span data-i18n="splitEqually">Split equally</span><span><button type="button" class="link" id="selAll" data-i18n="all">All</button> · <button type="button" class="link" id="selNone" data-i18n="none">None</button></span></div>
+      <div class="split-opts" id="splitOpts"></div>
+    </div>
+    <div id="exactBox" hidden>
+      <div class="exact-list" id="exactList"></div>
+    </div>
     <p class="preview num" id="preview"></p>
     <p class="err" id="expErr"></p>
-    <button class="btn primary wide save-btn" type="submit" data-i18n="addExpense">Add expense</button>
+    <button class="btn primary wide save-btn" type="submit" id="saveBtn">Add expense</button>
   </form>
 </div>
 

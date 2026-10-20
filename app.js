@@ -5,7 +5,7 @@ import {
   sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, signOut
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
-  getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, collection, setDoc, addDoc, deleteDoc, updateDoc, getDoc, getDocs, onSnapshot,
+  getFirestore, initializeFirestore, deleteField, persistentLocalCache, persistentMultipleTabManager, doc, collection, setDoc, addDoc, deleteDoc, updateDoc, getDoc, getDocs, onSnapshot,
   serverTimestamp, writeBatch
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js";
@@ -103,11 +103,16 @@ export function shares(cents, people) {
   const n = people.length, b = Math.floor(cents / n); let r = cents - b * n;
   return people.map(p => [p, b + (r-- > 0 ? 1 : 0)]);
 }
+// What each person owes for one expense: exact amounts when set, otherwise an equal split
+export function expShares(e) {
+  if (e.splitAmounts && typeof e.splitAmounts === "object") return Object.entries(e.splitAmounts).filter(([, c]) => c > 0);
+  return shares(e.cents, e.split);
+}
 export function balances(people, expenses) {
   const b = Object.fromEntries(people.map(p => [p, 0]));
   for (const e of expenses) {
     if (b[e.payer] !== undefined) b[e.payer] += e.cents;
-    for (const [p, c] of shares(e.cents, e.split)) if (b[p] !== undefined) b[p] -= c;
+    for (const [p, c] of expShares(e)) if (b[p] !== undefined) b[p] -= c;
   }
   return b;
 }
@@ -510,6 +515,7 @@ const api = {
   updatePerson: (id, data) => updateDoc(doc(gcol("people"), id), data),
   addExpense: e => { const m = me(); return addDoc(gcol("expenses"), { ...e, createdAt: Date.now(), addedBy: m.id, addedByName: m.name }) },
   deleteExpense: id => deleteDoc(doc(gcol("expenses"), id)),
+  editExpense: (id, data) => updateDoc(doc(gcol("expenses"), id), data),
   updateGroup: data => updateDoc(doc(db, "groups", S.id), data),
 };
 
@@ -543,14 +549,70 @@ $("plusBtn").onclick = openAdd;
 $("emptyAdd").onclick = openAdd;
 $("emptyInvite").onclick = () => shareInvite();
 $("addClose").onclick = () => closeSheet();
-function openAdd() {
-  if (!me()) return;
+let editingId = null, splitMode = "equal";
+function resetForm() {
+  $("amount").value = ""; $("desc").value = ""; $("expErr").textContent = "";
+  $("splitOpts").innerHTML = ""; $("exactList").innerHTML = "";
+  setSplitMode("equal");
+}
+function showForm() {
   openSheet("add", el => {
     if ($("expForm").parentElement !== el) { el.innerHTML = ""; el.appendChild($("expForm")) }
-    $("expErr").textContent = "";
-    renderSplit(); refreshFxLabels(); preview(); updateDescIcon();
+    renderSplit(); refreshFxLabels(); preview(); updateDescIcon(); formLabels();
   });
+}
+function formLabels() {
+  const e = editingId && S.expenses.find(x => x.id === editingId);
+  $("addTitle").textContent = editingId ? t("editExpense") : t("addExpenseTitle");
+  $("saveBtn").textContent = editingId ? t("saveChanges") : t("addExpense");
+  $("paidByVal").textContent = e ? (e.payer === me()?.name ? t("you") : e.payer) : t("you");
+}
+function openAdd() {
+  if (!me()) return;
+  if (editingId) { editingId = null; $("expCurrency").dataset.group = "" }   // start fresh after an edit
+  resetForm();
+  showForm();
   setTimeout(() => $("amount").focus(), 250);
+}
+function openEdit(id) {
+  const e = S.expenses.find(x => x.id === id);
+  if (!e || !me()) return;
+  editingId = id;
+  resetForm();
+  const fxE = e.origCurrency && e.origCurrency !== S.currency;
+  const cur = fxE ? e.origCurrency : S.currency;
+  const sel = $("expCurrency"); sel.dataset.group = S.id; sel.value = cur;
+  fx = { cur, rate: fxE ? e.rate : null, edited: true, req: fx.req + 1 };
+  $("fxRate").value = fxE ? niceRate(e.rate) : ""; $("fxNote").textContent = "";
+  const amt = fxE ? e.origAmount : e.cents / unit(S.currency);
+  $("amount").value = amt.toFixed(digits(cur));
+  $("desc").value = e.desc || "";
+  // tick exactly the people in this expense
+  $("splitOpts").innerHTML = S.people.map((p, i) => `<label class="sp"><input type="checkbox" id="sp${i}" value="${esc(p)}" ${e.split.includes(p) ? "checked" : ""}>${avatar(p, "xs")}${esc(p === me().name ? t("you") : p)}</label>`).join("");
+  if (e.splitAmounts) {
+    setSplitMode("exact");
+    const orig = e.splitOrig || {};
+    renderExact(Object.fromEntries(S.people.map(p => {
+      const v = fxE ? (orig[p] ?? (e.splitAmounts[p] || 0) / unit(S.currency) / e.rate) : (e.splitAmounts[p] || 0) / unit(S.currency);
+      return [p, v ? (+v).toFixed(digits(cur)) : ""];
+    })));
+  }
+  showForm();
+}
+function setSplitMode(m) {
+  splitMode = m;
+  $("splitMode").querySelectorAll("[data-m]").forEach(b => b.classList.toggle("on", b.dataset.m === m));
+  $("equalBox").hidden = m !== "equal"; $("exactBox").hidden = m !== "exact";
+  if (m === "exact" && !$("exactList").children.length) renderExact();
+  preview();
+}
+$("splitMode").addEventListener("click", e => { const b = e.target.closest("[data-m]"); if (b) setSplitMode(b.dataset.m) });
+// Exact-amount rows, keeping anything already typed
+function renderExact(values) {
+  const mine = me(); if (!mine) return;
+  const prev = values || Object.fromEntries([...document.querySelectorAll("#exactList input")].map(i => [i.dataset.p, i.value]));
+  $("exactList").innerHTML = S.people.map((p, i) => `<label class="ex-row">${avatar(p, "sm")}<span class="ex-name">${esc(p === mine.name ? t("you") : p)}</span><input id="ex${i}" data-p="${esc(p)}" inputmode="decimal" autocomplete="off" placeholder="0" value="${esc(prev[p] || "")}"></label>`).join("");
+  $("exactList").querySelectorAll("input").forEach(i => i.oninput = preview);
 }
 
 // ---------- settings sheet ----------
@@ -772,7 +834,7 @@ function breakdown() {
   for (const e of S.expenses) {
     if (e.payment) { hasPayments = true; continue }
     if (by[e.payer]) by[e.payer].paid += e.cents;
-    for (const [p, c] of shares(e.cents, e.split)) if (by[p]) by[p].share += c;
+    for (const [p, c] of expShares(e)) if (by[p]) by[p].share += c;
   }
   return { rows: rows.sort((a, c) => c.net - a.net), tx: settle(b), hasPayments };
 }
@@ -926,8 +988,8 @@ function expenseRow(e, myName) {
     title = t("repaidLine", { from: e.payer === myName ? t("you") : e.payer, to: e.split[0] === myName ? t("youObj") : e.split[0] });
     sub = t("repayment");
   } else {
-    sub = (e.payer === myName ? t("youPaid") : t("xPaid", { name: e.payer })) + " · " + (fx ? fmtAmount(e.origAmount, e.origCurrency) : t("splitWays", { n: e.split.length }));
-    const myShare = (shares(e.cents, e.split).find(([p]) => p === myName) || [, 0])[1];
+    sub = (e.payer === myName ? t("youPaid") : t("xPaid", { name: e.payer })) + " · " + (fx ? fmtAmount(e.origAmount, e.origCurrency) : e.splitAmounts ? t("splitCustom") : t("splitWays", { n: e.split.length }));
+    const myShare = (expShares(e).find(([p]) => p === myName) || [, 0])[1];
     if (e.payer === myName) { const lent = e.cents - myShare; end2 = lent > 0 ? `<div class="sub get-t">${esc(t("youLentX", { x: fmtMinor(lent) }))}</div>` : "" }
     else if (myShare) end2 = `<div class="sub owe-t">${esc(t("youOweX", { x: fmtMinor(myShare) }))}</div>`;
     else end2 = `<div class="sub">${esc(t("notInvolved"))}</div>`;
@@ -1010,6 +1072,7 @@ function renderSplit() {
   const known = new Set([...document.querySelectorAll("#splitOpts input")].map(i => i.value));
   $("splitOpts").innerHTML = S.people.map((p, i) => `<label class="sp"><input type="checkbox" id="sp${i}" value="${esc(p)}" ${!known.has(p) || prevSplit.has(p) ? "checked" : ""}>${avatar(p, "xs")}${esc(p === mine.name ? t("you") : p)}</label>`).join("");
   $("splitOpts").querySelectorAll("input").forEach(i => i.onchange = preview);
+  if (splitMode === "exact") renderExact();
   initExpCurrency();
 }
 
@@ -1021,17 +1084,19 @@ function openExpense(id) {
     const fx = e.origCurrency && e.origCurrency !== S.currency;
     const canDelete = !e.addedBy || e.addedBy === mine.id || amAdmin();
     const when = e.createdAt ? new Date(e.createdAt).toLocaleString(locale(), { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
-    const per = shares(e.cents, e.split);
+    const per = expShares(e);
     el.innerHTML = `${sheetHead(e.payment ? t("repayment") : e.desc)}
       <div style="display:flex;align-items:center;gap:12px">${catIcon(e.desc, e.payment)}<p class="detail-amt num">${fmtMinor(e.cents)}</p></div>
       ${fx ? `<p class="hint">${esc(t("paidOrig", { amount: fmtAmount(e.origAmount, e.origCurrency), from: e.origCurrency, rate: niceRate(e.rate), to: S.currency }))}</p>` : ""}
       <div class="list-card">
         <div class="kv"><span>${esc(t("paidBy"))}</span><span>${esc(e.payer)}</span></div>
         ${per.map(([p, c]) => `<div class="kv"><span>${esc(p)}</span><span class="num">${fmtMinor(c)}</span></div>`).join("")}
-        ${e.addedByName ? `<div class="kv"><span>${esc(t("addedBy", { name: "" }).trim())}</span><span>${esc(e.addedByName)}${when ? " · " + esc(when) : ""}</span></div>` : ""}
+        ${e.addedByName ? `<div class="kv"><span>${esc(t("addedByLabel"))}</span><span>${esc(e.addedByName)}${when ? " · " + esc(when) : ""}</span></div>` : ""}
+        ${e.editedAt ? `<div class="kv"><span>${esc(t("editedLabel"))}</span><span>${esc(e.editedByName || "")}${e.editedByName ? " · " : ""}${esc(new Date(e.editedAt).toLocaleString(locale(), { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }))}</span></div>` : ""}
       </div>
-      ${canDelete ? `<button class="btn ghost wide" id="expDel" type="button" style="color:var(--owe)">${esc(t("del"))}</button>` : ""}`;
+      ${canDelete ? `<div class="detail-actions">${e.payment ? "" : `<button class="btn primary" id="expEdit" type="button">${esc(t("edit"))}</button>`}<button class="btn ghost" id="expDel" type="button" style="color:var(--owe)">${esc(t("del"))}</button></div>` : ""}`;
     wireClose(el);
+    if ($("expEdit")) $("expEdit").onclick = () => openEdit(id);
     if (canDelete) $("expDel").onclick = async () => {
       if (!$("expDel").dataset.armed) { $("expDel").dataset.armed = 1; $("expDel").textContent = t("tapAgainDelete"); return }
       closeSheet(); await act(() => api.deleteExpense(id));
@@ -1113,10 +1178,38 @@ function homeCents() {
   return Math.round(amt * fx.rate * unit(S.currency));
 }
 const checked = () => [...document.querySelectorAll("#splitOpts input:checked")].map(i => i.value);
+const num = v => { const n = parseFloat(String(v).replace(/[^0-9.,]/g, "").replace(",", ".")); return isFinite(n) && n > 0 ? n : 0 };
+// Exact amounts typed in the expense's currency: { name: amount } (only people with an amount)
+function exactValues() {
+  const c = $("expCurrency").value, out = {};
+  document.querySelectorAll("#exactList input").forEach(i => { const v = Math.round(num(i.value) * unit(c)) / unit(c); if (v > 0) out[i.dataset.p] = v });
+  return out;
+}
+// Convert exact amounts to home-currency minor units that add up exactly to the total
+function exactHomeCents(vals, totalCents) {
+  const c = $("expCurrency").value, rate = c === S.currency ? 1 : fx.rate;
+  const sumOrig = Object.values(vals).reduce((a, b) => a + b, 0);
+  const out = {};
+  for (const [p, v] of Object.entries(vals)) out[p] = Math.round(v * (c === S.currency ? unit(c) : rate * unit(S.currency)));
+  // Fix rounding so the parts add up to the total exactly
+  const diff = totalCents - Object.values(out).reduce((a, b) => a + b, 0);
+  if (diff && sumOrig) { const big = Object.keys(out).sort((a, b) => out[b] - out[a])[0]; out[big] += diff }
+  return out;
+}
 function preview() {
   if (!S.id) return;
   const c = $("expCurrency").value, amt = parseAmount(), cents = homeCents(), s = checked();
   $("convLine").textContent = c !== S.currency && cents ? "= " + fmtMinor(cents) : "";
+  $("preview").classList.remove("warn-t", "ok-t");
+  if (splitMode === "exact") {
+    const vals = exactValues(), sum = Object.values(vals).reduce((a, b) => a + b, 0);
+    const left = Math.round((amt - sum) * unit(c)) / unit(c);
+    if (!amt) return $("preview").textContent = "";
+    if (left > 0) { $("preview").textContent = t("remainingX", { x: fmtAmount(left, c) }); $("preview").classList.add("warn-t") }
+    else if (left < 0) { $("preview").textContent = t("overX", { x: fmtAmount(-left, c) }); $("preview").classList.add("warn-t") }
+    else { $("preview").textContent = t("exactOk"); $("preview").classList.add("ok-t") }
+    return;
+  }
   if (!amt) return $("preview").textContent = "";
   if (!cents) return $("preview").textContent = t("enterRate");
   $("preview").textContent = s.length ? t("eachX", { x: fmtMinor(Math.round(cents / s.length)), n: s.length }) : "";
@@ -1126,17 +1219,45 @@ $("selAll").onclick = () => { document.querySelectorAll("#splitOpts input").forE
 $("selNone").onclick = () => { document.querySelectorAll("#splitOpts input").forEach(i => i.checked = false); preview() };
 $("expForm").addEventListener("submit", e => {
   e.preventDefault(); const err = $("expErr");
-  const desc = $("desc").value.trim(), amt = parseAmount(), cents = homeCents(), split = checked(), c = $("expCurrency").value;
+  const desc = $("desc").value.trim(), amt = parseAmount(), cents = homeCents(), c = $("expCurrency").value;
+  const old = editingId && S.expenses.find(x => x.id === editingId);
+  if (editingId && !old) { editingId = null; closeSheet(); return }
   if (S.people.length < 2) return err.textContent = t("errNeedFriend");
   if (!desc) return err.textContent = t("errDesc");
   if (!amt) return err.textContent = t("errAmount");
   if (!cents) return err.textContent = t("errRate");
-  if (!split.length) return err.textContent = t("errSplit");
-  const entry = { desc, cents, payer: me().name, split };
-  if (c !== S.currency) Object.assign(entry, { origAmount: amt, origCurrency: c, rate: fx.rate });
-  err.textContent = ""; $("desc").value = ""; $("amount").value = ""; preview(); updateDescIcon();
-  document.activeElement?.blur();
+  let split, splitAmounts = null, splitOrig = null;
+  if (splitMode === "exact") {
+    const vals = exactValues(), sum = Object.values(vals).reduce((a, b) => a + b, 0);
+    if (!Object.keys(vals).length) return err.textContent = t("errSplit");
+    if (Math.round((amt - sum) * unit(c)) !== 0) return err.textContent = t("errExact");
+    split = S.people.filter(p => vals[p]);
+    splitAmounts = exactHomeCents(vals, cents);
+    if (c !== S.currency) splitOrig = vals;
+  } else {
+    split = checked();
+    if (!split.length) return err.textContent = t("errSplit");
+  }
+  const entry = { desc, cents, payer: old ? old.payer : me().name, split };
+  const fxOn = c !== S.currency;
+  if (fxOn) Object.assign(entry, { origAmount: amt, origCurrency: c, rate: fx.rate });
+  if (splitAmounts) entry.splitAmounts = splitAmounts;
+  if (splitOrig) entry.splitOrig = splitOrig;
+  err.textContent = ""; document.activeElement?.blur();
+  if (old) {
+    const id = editingId, m = me();
+    const patch = { ...entry, editedAt: Date.now(), editedByName: m.name };
+    // Clear fields that no longer apply (e.g. switched back to the home currency or to an equal split)
+    if (!fxOn) Object.assign(patch, { origAmount: deleteField(), origCurrency: deleteField(), rate: deleteField() });
+    if (!splitAmounts) patch.splitAmounts = deleteField();
+    if (!splitOrig) patch.splitOrig = deleteField();
+    act(() => api.editExpense(id, patch));
+    editingId = null; $("expCurrency").dataset.group = "";
+    closeSheet(); toast(t("editedToast"));
+    return;
+  }
   act(() => api.addExpense(entry));
+  resetForm(); updateDescIcon();
   closeSheet(); tab = "home"; show("group"); window.scrollTo({ top: 0 });
   toast(t("addedToast"));
 });
@@ -1148,6 +1269,7 @@ function applyLanguage() {
   $("langSel").value = lang;
   $("inviteBtn").setAttribute("aria-label", t("copyInviteRow"));
   $("plusBtn").setAttribute("aria-label", t("addExpenseTitle"));
+  if (sheetName === "add") formLabels();
   $("menuBtn").setAttribute("aria-label", t("groupSettings"));
   if (S.id && me() && !forceJoin) render();
   else if (S.id && S.loaded.people) renderJoin();

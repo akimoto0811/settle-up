@@ -106,7 +106,18 @@ service cloud.firestore {
           && request.resource.data.split is list && request.resource.data.split.size() > 0
           && request.resource.data.addedBy is string
           && isPerson(gid, request.resource.data.addedBy);
-        allow update: if false;
+        // Edit an expense you added (admins: any). Who added it, who paid and repayments can't change.
+        allow update: if signedIn() && exists(g(gid))
+          && request.resource.data.get('addedBy', null) == resource.data.get('addedBy', null)
+          && request.resource.data.payer == resource.data.payer
+          && resource.data.get('payment', false) == false
+          && request.resource.data.get('payment', false) == false
+          && request.resource.data.desc is string && request.resource.data.desc.size() <= 80
+          && request.resource.data.cents is int && request.resource.data.cents > 0
+          && request.resource.data.split is list && request.resource.data.split.size() > 0
+          && (isPerson(gid, resource.data.get('addedBy', '-'))
+              || isAdmin(gid)
+              || legacy(gid));
         // Delete your own expenses; admins can delete any
         allow delete: if signedIn() && (
           resource.data.get('addedBy', null) == null
