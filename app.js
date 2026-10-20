@@ -278,6 +278,7 @@ let signinState = { mode: "choose", err: "" };   // choose | email | sent | fini
 let pendingLink = null;
 function openSignIn(mode) {
   signinState = { mode: mode || "choose", err: "" };
+  prefetchGroups();
   openSheet("signin", el => {
     if (account) {
       el.innerHTML = `${sheetHead(t("accountRow"))}
@@ -304,7 +305,14 @@ function openSignIn(mode) {
     const err = msg => { signinState.err = msg; $("acctErr").textContent = msg };
     if (m === "choose") {
       $("googleBtn").onclick = () => signInWith(() => signInWithPopup(auth, new GoogleAuthProvider())).then(closeSheet).catch(e => {
-        console.error(e); if (e.code !== "auth/popup-closed-by-user" && e.code !== "auth/cancelled-popup-request") err(t("googleFail"));
+        console.error(e);
+        const c = e.code || "";
+        if (c === "auth/popup-closed-by-user" || c === "auth/cancelled-popup-request") return;
+        if (c === "auth/unauthorized-domain") return err(t("gUnauthorized", { domain: location.hostname }));
+        if (c === "auth/operation-not-allowed") return err(t("gNotEnabled"));
+        if (c === "auth/popup-blocked") return err(t("gBlocked"));
+        if (c === "auth/credential-already-in-use" || c === "auth/email-already-in-use") return err(t("gInUse"));
+        err(t("googleFail") + (c ? ` (${c.replace("auth/", "")})` : ""));
       });
       $("emailBtn").onclick = () => { signinState.mode = "email"; refreshSheet(); $("emailInput").focus() };
     }
@@ -327,11 +335,17 @@ function openSignIn(mode) {
   });
 }
 // Sign in with an account, then move this device's group names over to it
+// This device's groups, loaded ahead of time so the Google window can open the moment you tap
+// (Safari blocks pop-ups that don't open straight away)
+let prefetched = { uid: null, groups: [] };
+function prefetchGroups() { const u = uid; myGroups(u).then(g => { if (uid === u) prefetched = { uid: u, groups: g } }) }
 async function signInWith(doSignIn) {
-  const oldUid = uid, oldGroups = await myGroups(oldUid);
+  const oldUid = uid;
+  const signing = doSignIn();          // must start first, inside the tap
   migrating = true;
   try {
-    const cred = await doSignIn();
+    const oldGroups = prefetched.uid === oldUid ? prefetched.groups : await myGroups(oldUid).catch(() => []);
+    const cred = await signing;
     if (cred.user.uid !== oldUid) await migrate(oldGroups, oldUid, cred.user.uid);
     toast(t("signedInToast"));
   } finally { migrating = false; uid = auth.currentUser?.uid || uid; account = auth.currentUser && !auth.currentUser.isAnonymous ? auth.currentUser : null; renderAccount(); route() }
