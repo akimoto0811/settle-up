@@ -254,7 +254,15 @@ async function showStart() {
   $("groupSel").innerHTML = list.map(g => `<option value="${esc(g.id)}">${esc(g.name || t("groupFallback"))}</option>`).join("");
   if (!list.length) $("createForm").hidden = false;
   $("newGroupBtn").hidden = !list.length;
+  if (openCreateNext) {
+    // Came from "New group" inside a group: go straight to the form
+    openCreateNext = false;
+    $("createForm").hidden = false; $("newGroupBtn").hidden = true;
+    $("createForm").scrollIntoView({ block: "start" });
+    setTimeout(() => $("groupName").focus(), 200);
+  }
 }
+let openCreateNext = false;
 $("openGroupBtn").onclick = () => { const id = $("groupSel").value; if (id) location.hash = id };
 $("newGroupBtn").onclick = () => { $("createForm").hidden = !$("createForm").hidden; if (!$("createForm").hidden) $("groupName").focus() };
 function rememberGroup() {
@@ -534,16 +542,17 @@ const api = {
 };
 
 // ---------- top bar ----------
-$("switchBtn").onclick = () => openSheet("switch", async el => {
-  el.innerHTML = `${sheetHead(t("switchGroup"))}<div class="menu" id="gList"><p class="hint">…</p></div>
-    <button class="btn ghost wide" id="toHome" type="button">${esc(t("allGroupsNew"))}</button>`;
+$("switchBtn").onclick = () => openGroups();
+function openGroups() { openSheet("switch", async el => {
+  el.innerHTML = `${sheetHead(t("yourGroups"))}<div class="menu" id="gList"><p class="hint">…</p></div>
+    <button class="btn primary wide" id="toNew" type="button">＋ ${esc(t("newGroup"))}</button>`;
   wireClose(el);
-  $("toHome").onclick = () => goHome();
+  $("toNew").onclick = () => { openCreateNext = true; goHome() };
   const list = await allMyGroups();
   if (sheetName !== "switch") return;
   $("gList").innerHTML = list.map(g => `<button class="mi" type="button" data-g="${esc(g.id)}">${g.id === S.id ? ICON.check : ICON.users}<span>${esc(g.name || t("groupFallback"))}</span>${g.id === S.id ? `<span class="side">${esc(t("current"))}</span>` : ""}</button>`).join("");
   $("gList").querySelectorAll("[data-g]").forEach(b => b.onclick = () => { if (b.dataset.g !== S.id) { tab = "home"; navTo(b.dataset.g) } else closeSheet() });
-});
+}) }
 async function shareInvite() {
   const url = groupLink();
   if (navigator.share) { try { await navigator.share({ title: S.name, text: t("inviteText", { name: S.name, url: "" }).trim(), url }); return } catch (e) { if (e.name === "AbortError") return } }
@@ -634,6 +643,7 @@ function openSettings() {
   openSheet("settings", el => {
     const editGroup = canEditGroup();
     el.innerHTML = `${sheetHead(t("groupSettings"))}<div class="menu">
+      <button class="mi" type="button" id="mGroups">${ICON.swap}<span>${esc(t("switchOrAdd"))}</span></button>
       <button class="mi" type="button" id="mInvite">${ICON.link}<span>${esc(t("copyInviteRow"))}</span></button>
       <button class="mi" type="button" id="mPeople">${ICON.users}<span>${esc(t("peopleAdmins"))}</span><span class="side">${S.people.length}</span></button>
       ${editGroup ? `<button class="mi" type="button" id="mRename">${ICON.edit}<span>${esc(t("rename"))}</span></button>` : ""}
@@ -647,6 +657,7 @@ function openSettings() {
     wireClose(el);
     $("mInvite").onclick = () => { closeSheet(); copyText(groupLink(), t("copied")) };
     $("mPeople").onclick = openPeople;
+    $("mGroups").onclick = openGroups;
     if ($("mRename")) $("mRename").onclick = openRename;
     $("mCurrency").onclick = openCurrency;
     $("mLang").value = lang;
