@@ -69,6 +69,8 @@ The app comes in English and Traditional Chinese (繁體中文). It picks the ph
 
 ## Layout
 
+The app opens on **Your groups**: an overall total across all your groups, then a card for each group with your balance in it, and **＋ New group**. Invite links open straight into their group. Inside a group, the **‹** arrow next to the name goes back to Your groups.
+
 Inside a group, **Home** shows your overall balance in the green card, with one-tap **Mark paid** / **Mark received** for your payments, everyone's balance as avatars, and recent expenses. **Activity** lists everything by day, with filters. The round **+** button opens the full-screen Add expense form. Tap any expense for details, **Edit** (amount, currency, description, who's in the split) and **Delete**, or any avatar for that person's Paid / Share / Net.
 
 ## Sharing a summary

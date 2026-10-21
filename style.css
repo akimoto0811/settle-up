@@ -357,3 +357,19 @@ html{background:var(--bg)}
 .preview.warn-t{color:var(--owe)} .preview.ok-t{color:var(--accent)}
 .detail-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .detail-actions:has(> :only-child){grid-template-columns:1fr}
+
+/* ===== home: your groups ===== */
+.home-hero{margin:0;padding:18px 18px 20px}
+.home-hero .hero-num{margin-top:4px;font-size:2.1rem}
+.group-cards{display:flex;flex-direction:column;gap:10px}
+.gcard{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:14px;cursor:pointer;color:var(--fg);min-width:0}
+.gcard:active{background:var(--accent-soft)}
+.gc-icon{width:44px;height:44px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.9rem;flex:none}
+.gc-mid{flex:1;min-width:0;display:flex;flex-direction:column}
+.gc-name{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gc-sub{font-size:.8rem;color:var(--muted)}
+.gc-bal{display:flex;flex-direction:column;align-items:flex-end;flex:none;font-weight:700;font-size:.95rem}
+.gc-bal.muted{color:var(--muted);font-weight:500;font-size:.85rem}
+.gc-lbl{font-size:.72rem;font-weight:500;color:var(--muted)}
+.back-btn{margin-left:-8px;width:36px}
+.back-btn svg{width:22px;height:22px}

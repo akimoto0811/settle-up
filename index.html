@@ -48,12 +48,14 @@
 
   <!-- Start screen -->
   <section id="startView" class="view" hidden>
-    <div class="card" id="groupsCard" hidden>
-      <label class="field"><span data-i18n="yourGroups">Your groups</span>
-        <select id="groupSel"></select>
-      </label>
-      <button class="btn primary" id="openGroupBtn" type="button" data-i18n="openGroup">Open group</button>
+    <div class="hero home-hero" id="homeHero" hidden>
+      <div class="hero-sub" data-i18n="overall">Overall</div>
+      <div class="hero-num num" id="homeNum"></div>
+      <div class="hero-sub" id="homeSub"></div>
     </div>
+
+    <div class="sec-head" id="groupsHead" hidden><h2 data-i18n="yourGroups">Your groups</h2></div>
+    <div class="group-cards" id="groupCards"></div>
 
     <button class="btn ghost wide" id="newGroupBtn" type="button"><span aria-hidden="true">＋</span> <span data-i18n="newGroup">New group</span></button>
 
@@ -94,6 +96,7 @@
   <section id="homeView" class="view group-view" hidden>
     <div class="hero">
       <div class="hero-bar">
+        <button class="icon-btn back-btn" id="backBtn" type="button" aria-label="All groups"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
         <button class="group-switch" id="switchBtn" type="button"><span id="gName"></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
         <button class="icon-btn" id="inviteBtn" type="button" aria-label="Copy invite link"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="4"/><path d="M2 21v-1a6 6 0 0 1 6-6h2a6 6 0 0 1 6 6v1M19 8v6M16 11h6"/></svg></button>
         <button class="icon-btn" id="menuBtn" type="button" aria-label="Group settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/></svg></button>

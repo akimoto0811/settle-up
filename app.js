@@ -234,15 +234,13 @@ function route() {
   forceJoin = false; selectedPerson = null;
   if (sheetName && sheetName !== "signin") { sheetPushed = false; hideSheet() }
   const gid = groupIdFromHash();
-  if (!gid) {
-    const last = store.get("settleup.last", null);
-    if (last && !session.get("settleup.stayHome")) { location.replace("#" + last); return }
-    return showStart();
-  }
+  if (!gid) return showStart();   // the app always opens on Your groups; invite links still open the group
   store.set("settleup.last", gid);
   openGroup(gid);
 }
 
+// ---------- home: your groups with your balance in each ----------
+let homeList = [], homeSums = {};
 async function showStart() {
   S = blankGroup(null);
   show("start");
@@ -250,8 +248,8 @@ async function showStart() {
   renderAccount();
   const list = await allMyGroups();
   if (S.id) return;
-  $("groupsCard").hidden = !list.length;
-  $("groupSel").innerHTML = list.map(g => `<option value="${esc(g.id)}">${esc(g.name || t("groupFallback"))}</option>`).join("");
+  homeList = list;
+  renderHome();
   if (!list.length) $("createForm").hidden = false;
   $("newGroupBtn").hidden = !list.length;
   if (openCreateNext) {
@@ -261,10 +259,60 @@ async function showStart() {
     $("createForm").scrollIntoView({ block: "start" });
     setTimeout(() => $("groupName").focus(), 200);
   }
+  // Work out your balance in each group (cached groups answer instantly)
+  list.forEach(g => groupSummary(g.id).then(sum => {
+    if (S.id) return;
+    if (sum === null) { forgetGroup(g.id); homeList = homeList.filter(x => x.id !== g.id); delete homeSums[g.id] }
+    else if (sum) homeSums[g.id] = sum;
+    renderHome();
+  }));
+}
+async function groupSummary(gid) {
+  try {
+    const gref = doc(db, "groups", gid);
+    const gs = await getDoc(gref);
+    if (!gs.exists()) return gs.metadata?.fromCache ? undefined : null;   // null = deleted
+    const [pp, ex] = await Promise.all([getDocs(collection(gref, "people")), getDocs(collection(gref, "expenses"))]);
+    const people = pp.docs.map(d => d.data());
+    const mine = people.find(p => p.uid && p.uid === uid);
+    const exps = ex.docs.map(d => d.data());
+    const d = gs.data();
+    const bal = mine ? (balances(people.map(p => p.name), exps)[mine.name] || 0) : null;
+    return { name: d.name || t("groupFallback"), currency: d.currency || "USD", n: people.length, bal };
+  } catch (e) { console.warn("summary", gid, e); return undefined }
+}
+function renderHome() {
+  if (S.id) return;
+  const has = homeList.length > 0;
+  $("groupsHead").hidden = !has; $("homeHero").hidden = !has;
+  $("groupCards").innerHTML = homeList.map(g => {
+    const sum = homeSums[g.id], name = sum?.name || g.name || t("groupFallback");
+    let right = `<span class="gc-bal muted">…</span>`;
+    if (sum) {
+      const fm = v => fmtMinor(Math.abs(v), sum.currency);
+      right = sum.bal === null ? `<span class="gc-bal muted">${esc(t("notJoinedShort"))}</span>`
+        : sum.bal < 0 ? `<span class="gc-bal"><span class="gc-lbl">${esc(t("youOweShort"))}</span><span class="owe-t num">${fm(sum.bal)}</span></span>`
+        : sum.bal > 0 ? `<span class="gc-bal"><span class="gc-lbl">${esc(t("youreOwedShort"))}</span><span class="get-t num">${fm(sum.bal)}</span></span>`
+        : `<span class="gc-bal muted">${esc(t("settledShort"))}</span>`;
+    }
+    const people = sum ? (sum.n === 1 ? t("person1") : t("peopleN", { n: sum.n })) : "";
+    return `<button class="gcard" type="button" data-open="${esc(g.id)}"><span class="gc-icon ${avClass(name)}">${esc(initials(name))}</span><span class="gc-mid"><span class="gc-name">${esc(name)}</span><span class="gc-sub">${esc(people)}${sum ? " · " + esc(sum.currency) : ""}</span></span>${right}</button>`;
+  }).join("");
+  $("groupCards").querySelectorAll("[data-open]").forEach(b => b.onclick = () => { tab = "home"; location.hash = b.dataset.open });
+  // Overall total, per currency
+  const tot = {};
+  for (const g of homeList) { const sm = homeSums[g.id]; if (sm && sm.bal) tot[sm.currency] = (tot[sm.currency] || 0) + sm.bal }
+  const cur = Object.entries(tot).filter(([, v]) => v);
+  if (!cur.length) { $("homeNum").textContent = homeList.some(g => homeSums[g.id]) ? t("allSettledShort") : "…"; $("homeSub").textContent = homeList.some(g => homeSums[g.id]) ? t("acrossN", { n: homeList.length }) : "" }
+  else {
+    $("homeNum").textContent = cur.map(([c, v]) => (v > 0 ? "+" : "−") + fmtMinor(Math.abs(v), c)).join("  ·  ");
+    const owe = cur.some(([, v]) => v < 0), owed = cur.some(([, v]) => v > 0);
+    $("homeSub").textContent = (owe && owed ? t("mixedOverall") : owe ? t("youOweOverall") : t("youAreOwed")) + " · " + t("acrossN", { n: homeList.length });
+  }
 }
 let openCreateNext = false;
-$("openGroupBtn").onclick = () => { const id = $("groupSel").value; if (id) location.hash = id };
 $("newGroupBtn").onclick = () => { $("createForm").hidden = !$("createForm").hidden; if (!$("createForm").hidden) $("groupName").focus() };
+$("backBtn").onclick = () => goHome();
 function rememberGroup() {
   const recent = store.get("settleup.recent", []).filter(g => g.id !== S.id);
   recent.unshift({ id: S.id, name: S.name });
@@ -1294,11 +1342,13 @@ function applyLanguage() {
   $("langSel").value = lang;
   $("inviteBtn").setAttribute("aria-label", t("copyInviteRow"));
   $("plusBtn").setAttribute("aria-label", t("addExpenseTitle"));
+  $("backBtn").setAttribute("aria-label", t("allGroupsAria"));
   if (sheetName === "add") formLabels();
   $("menuBtn").setAttribute("aria-label", t("groupSettings"));
   if (S.id && me() && !forceJoin) render();
   else if (S.id && S.loaded.people) renderJoin();
   if (uid) renderAccount();
+  if (!S.id && !$("startView").hidden) renderHome();
 }
 $("langSel").onchange = e => { setLang(e.target.value); applyLanguage() };
 applyLanguage();
