@@ -43,7 +43,7 @@ service cloud.firestore {
         && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 60
         && request.resource.data.createdBy == request.auth.uid;
       allow update: if signedIn() && (
-        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['currency', 'name'])
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['currency', 'name', 'startDate', 'endDate', 'completed', 'completedAt'])
           && (isAdmin(gid) || legacy(gid)))
         // First admin of an older group without one
         || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['hasAdmin'])

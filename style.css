@@ -373,3 +373,24 @@ html{background:var(--bg)}
 .gc-lbl{font-size:.72rem;font-weight:500;color:var(--muted)}
 .back-btn{margin-left:-8px;width:36px}
 .back-btn svg{width:22px;height:22px}
+
+/* trip dates */
+.opt{font-weight:500;color:var(--muted);font-size:.75rem;margin-left:4px}
+.date-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
+.date-field{display:flex;flex-direction:column;gap:4px;font-size:.75rem;font-weight:600;color:var(--muted);min-width:0}
+.date-field input{min-height:44px;-webkit-appearance:none;appearance:none;text-align:left}
+.hero-dates{display:inline-flex;align-items:center;gap:6px;align-self:flex-start;background:rgba(255,255,255,.14);border-radius:999px;padding:5px 11px 5px 9px;font-size:.8rem;font-weight:600;margin-top:4px;max-width:100%}
+.hero-dates svg{width:15px;height:15px;flex:none}
+.hero-dates span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hd-status{opacity:.75;font-weight:500}
+.hd-status::before{content:"·";margin-right:6px}
+
+/* expense date + completed trips */
+.date-row-in input{border:0;background:transparent;padding:6px 0;margin-left:auto;width:auto;text-align:right;font-weight:600;min-height:0}
+.hero-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+.hero-chips:not(:has(> :not([hidden]))){display:none}
+.hero-dates{margin-top:0}
+.hero-done{display:inline-flex;align-items:center;gap:5px;background:var(--hero-fg);color:var(--hero);border-radius:999px;padding:5px 11px 5px 9px;font-size:.8rem;font-weight:700}
+.hero-done svg{width:15px;height:15px}
+body.trip-done .dock .plus{background:var(--muted);box-shadow:none}
+.group-cards.done .gcard{opacity:.75}

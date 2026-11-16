@@ -23,6 +23,7 @@ const session = {
   set(k, v) { try { sessionStorage.setItem(k, v) } catch { } }
 };
 const ICON = {
+  calendar: '<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>',
   link: '<svg viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>',
   users: '<svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="4"/><path d="M2 21v-1a6 6 0 0 1 6-6h2a6 6 0 0 1 6 6v1M16 4a4 4 0 0 1 0 8M22 21v-1a6 6 0 0 0-4-5.6"/></svg>',
   edit: '<svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16zM14 6l4 4"/></svg>',
@@ -45,7 +46,7 @@ let S = blankGroup(null);
 let unsubs = [];
 let db, auth, uid = null, account = null;
 let forceJoin = false, migrating = false, tab = "home", actFilter = "all";
-function blankGroup(id) { return { id, name: "", currency: "USD", legacy: false, hasAdminFlag: false, people: [], peopleDocs: [], expenses: [], loaded: { people: false } } }
+function blankGroup(id) { return { id, name: "", currency: "USD", startDate: null, endDate: null, completed: false, legacy: false, hasAdminFlag: false, people: [], peopleDocs: [], expenses: [], loaded: { people: false } } }
 
 const me = () => S.peopleDocs.find(p => p.uid && p.uid === uid) || null;
 const amAdmin = () => { const m = me(); return !!m && m.role === "admin" };
@@ -278,14 +279,14 @@ async function groupSummary(gid) {
     const exps = ex.docs.map(d => d.data());
     const d = gs.data();
     const bal = mine ? (balances(people.map(p => p.name), exps)[mine.name] || 0) : null;
-    return { name: d.name || t("groupFallback"), currency: d.currency || "USD", n: people.length, bal };
+    return { name: d.name || t("groupFallback"), currency: d.currency || "USD", n: people.length, bal, startDate: d.startDate || null, endDate: d.endDate || null, completed: !!d.completed };
   } catch (e) { console.warn("summary", gid, e); return undefined }
 }
 function renderHome() {
   if (S.id) return;
   const has = homeList.length > 0;
-  $("groupsHead").hidden = !has; $("homeHero").hidden = !has;
-  $("groupCards").innerHTML = homeList.map(g => {
+  $("homeHero").hidden = !has;
+  const card = g => {
     const sum = homeSums[g.id], name = sum?.name || g.name || t("groupFallback");
     let right = `<span class="gc-bal muted">…</span>`;
     if (sum) {
@@ -296,9 +297,13 @@ function renderHome() {
         : `<span class="gc-bal muted">${esc(t("settledShort"))}</span>`;
     }
     const people = sum ? (sum.n === 1 ? t("person1") : t("peopleN", { n: sum.n })) : "";
-    return `<button class="gcard" type="button" data-open="${esc(g.id)}"><span class="gc-icon ${avClass(name)}">${esc(initials(name))}</span><span class="gc-mid"><span class="gc-name">${esc(name)}</span><span class="gc-sub">${esc(people)}${sum ? " · " + esc(sum.currency) : ""}</span></span>${right}</button>`;
-  }).join("");
-  $("groupCards").querySelectorAll("[data-open]").forEach(b => b.onclick = () => { tab = "home"; location.hash = b.dataset.open });
+    return `<button class="gcard" type="button" data-open="${esc(g.id)}"><span class="gc-icon ${avClass(name)}">${esc(initials(name))}</span><span class="gc-mid"><span class="gc-name">${esc(name)}</span><span class="gc-sub">${esc(people)}${sum && (sum.startDate || sum.endDate) ? " · " + esc(fmtTripRange(sum.startDate, sum.endDate, true)) : ""}${sum ? " · " + esc(sum.currency) : ""}</span></span>${right}</button>`;
+  };
+  const active = homeList.filter(g => !homeSums[g.id]?.completed), done = homeList.filter(g => homeSums[g.id]?.completed);
+  $("groupsHead").hidden = !active.length; $("doneHead").hidden = !done.length;
+  $("groupCards").innerHTML = active.map(card).join("");
+  $("doneCards").innerHTML = done.map(card).join("");
+  document.querySelectorAll("#groupCards [data-open], #doneCards [data-open]").forEach(b => b.onclick = () => { tab = "home"; location.hash = b.dataset.open });
   // Overall total, per currency
   const tot = {};
   for (const g of homeList) { const sm = homeSums[g.id]; if (sm && sm.bal) tot[sm.currency] = (tot[sm.currency] || 0) + sm.bal }
@@ -437,6 +442,8 @@ async function finishEmail(link, email = store.get("settleup.signinEmail", "")) 
 $("createForm").addEventListener("submit", async e => {
   e.preventDefault();
   const name = $("groupName").value.trim(), founder = $("founderName").value.trim(), currency = $("newCurrency").value;
+  const startDate = $("newStart").value || null, endDate = $("newEnd").value || null;
+  if (startDate && endDate && endDate < startDate) return $("createErr").textContent = t("errDates");
   const err = $("createErr");
   if (!name) return err.textContent = t("errGroupName");
   if (!founder) return err.textContent = t("errFounder");
@@ -445,7 +452,7 @@ $("createForm").addEventListener("submit", async e => {
     const gref = doc(collection(db, "groups"));
     const pref = doc(collection(gref, "people"));
     const b = writeBatch(db);
-    b.set(gref, { name, currency, createdAt: serverTimestamp(), createdBy: uid, hasAdmin: true });
+    b.set(gref, { name, currency, createdAt: serverTimestamp(), createdBy: uid, hasAdmin: true, ...(startDate ? { startDate } : {}), ...(endDate ? { endDate } : {}) });
     b.set(pref, { name: founder, uid, role: "admin", createdAt: Date.now() });
     b.set(doc(gref, "members", uid), { personId: pref.id });
     b.set(doc(userGroupsCol(uid), gref.id), { name, personId: pref.id, openedAt: Date.now() });
@@ -453,10 +460,10 @@ $("createForm").addEventListener("submit", async e => {
     const saving = b.commit();
     pendingGroups[gref.id] = {
       saving,
-      initial: { name, currency, legacy: false, hasAdminFlag: true, peopleDocs: [{ id: pref.id, name: founder, uid, role: "admin", createdAt: Date.now() }] },
+      initial: { name, currency, startDate, endDate, legacy: false, hasAdminFlag: true, peopleDocs: [{ id: pref.id, name: founder, uid, role: "admin", createdAt: Date.now() }] },
     };
     saving.catch(e3 => { console.error(e3); delete pendingGroups[gref.id]; forgetGroup(gref.id); goHome(); status(t("createFail"), true) });
-    $("groupName").value = ""; $("founderName").value = ""; $("createForm").hidden = true;
+    $("groupName").value = ""; $("founderName").value = ""; $("newStart").value = ""; $("newEnd").value = ""; $("createForm").hidden = true;
     tab = "home";
     location.hash = gref.id;
     setTimeout(() => toast(t("createdToast")), 300);
@@ -507,7 +514,7 @@ function subscribeGroup(gid, attempt) {
     }
     ok(s);
     S.loaded.group = true;
-    const d = s.data() || {}; S.name = d.name || t("groupFallback"); S.currency = d.currency || "USD"; S.legacy = !d.createdBy; S.hasAdminFlag = !!d.hasAdmin;
+    const d = s.data() || {}; S.name = d.name || t("groupFallback"); S.currency = d.currency || "USD"; S.legacy = !d.createdBy; S.hasAdminFlag = !!d.hasAdmin; S.startDate = d.startDate || null; S.endDate = d.endDate || null; S.completed = !!d.completed;
     document.title = S.name + " · Settle Up"; rememberGroup(); update();
   }, onErr));
   unsubs.push(onSnapshot(collection(gref, "people"), { includeMetadataChanges: false }, s => {
@@ -616,13 +623,16 @@ $("filters").addEventListener("click", e => {
   $("filters").querySelectorAll("[data-f]").forEach(x => x.classList.toggle("on", x === b));
   renderActivity();
 });
-$("plusBtn").onclick = openAdd;
-$("emptyAdd").onclick = openAdd;
+$("plusBtn").onclick = () => S.completed ? toast(t("completedNoAdd")) : openAdd();
+$("emptyAdd").onclick = () => S.completed ? toast(t("completedNoAdd")) : openAdd();
 $("emptyInvite").onclick = () => shareInvite();
 $("addClose").onclick = () => closeSheet();
 let editingId = null, splitMode = "equal";
+const todayStr = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}` };
+const dayStr = ts => { const d = new Date(ts); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}` };
 function resetForm() {
   $("amount").value = ""; $("desc").value = ""; $("expErr").textContent = "";
+  $("expDate").value = todayStr();
   $("splitOpts").innerHTML = ""; $("exactList").innerHTML = "";
   setSplitMode("equal");
 }
@@ -650,6 +660,7 @@ function openEdit(id) {
   if (!e || !me()) return;
   editingId = id;
   resetForm();
+  $("expDate").value = e.date || (e.createdAt ? dayStr(e.createdAt) : todayStr());
   const fxE = e.origCurrency && e.origCurrency !== S.currency;
   const cur = fxE ? e.origCurrency : S.currency;
   const sel = $("expCurrency"); sel.dataset.group = S.id; sel.value = cur;
@@ -695,9 +706,11 @@ function openSettings() {
       <button class="mi" type="button" id="mInvite">${ICON.link}<span>${esc(t("copyInviteRow"))}</span></button>
       <button class="mi" type="button" id="mPeople">${ICON.users}<span>${esc(t("peopleAdmins"))}</span><span class="side">${S.people.length}</span></button>
       ${editGroup ? `<button class="mi" type="button" id="mRename">${ICON.edit}<span>${esc(t("rename"))}</span></button>` : ""}
+      ${editGroup || S.startDate || S.endDate ? `<button class="mi" type="button" id="mDates">${ICON.calendar}<span>${esc(t("tripDates"))}</span><span class="side">${esc(S.startDate || S.endDate ? fmtTripRange(S.startDate, S.endDate, true) : t("addDates"))}</span></button>` : ""}
       <button class="mi" type="button" id="mCurrency">${ICON.money}<span>${esc(t("homeCurrencyRow", { c: S.currency }))}</span></button>
       <div class="mi">${ICON.globe}<span>${esc(t("languageRow"))}</span><select id="mLang" aria-label="${esc(t("languageRow"))}"><option value="en">English</option><option value="zh-Hant">繁體中文</option></select></div>
       <button class="mi" type="button" id="mAcct">${ICON.user}<span>${esc(t("accountRow"))}</span><span class="side">${esc(account ? (account.email || t("acctFallback")) : t("signInShort"))}</span></button>
+      ${canEditGroup() ? `<button class="mi" type="button" id="mComplete">${ICON.check}<span>${esc(S.completed ? t("reopenTrip") : t("markCompleted"))}</span></button>` : ""}
       <button class="mi" type="button" id="mSwitch">${ICON.swap}<span>${esc(t("switchName"))}</span></button>
       ${noAdmin() && !S.hasAdminFlag ? `<button class="mi" type="button" id="mBecome">${ICON.user}<span>${esc(t("becomeAdmin"))}<br><span class="hint">${esc(t("becomeAdminHint"))}</span></span></button>` : ""}
       ${canDeleteGroup() ? `<button class="mi danger" type="button" id="mDelete">${ICON.trash}<span>${esc(t("deleteGroup"))}</span><span class="side">${esc(t("adminsOnly"))}</span></button>` : ""}
@@ -707,13 +720,66 @@ function openSettings() {
     $("mPeople").onclick = openPeople;
     $("mGroups").onclick = openGroups;
     if ($("mRename")) $("mRename").onclick = openRename;
+    if ($("mDates")) $("mDates").onclick = openDates;
     $("mCurrency").onclick = openCurrency;
     $("mLang").value = lang;
     $("mLang").onchange = e => { setLang(e.target.value); applyLanguage(); refreshSheet() };
     $("mAcct").onclick = () => openSignIn();
     $("mSwitch").onclick = () => { closeSheet(); forceJoin = true; armed = null; update() };
+    if ($("mComplete")) $("mComplete").onclick = async () => {
+      const done = !S.completed;
+      closeSheet();
+      if (await act(() => api.updateGroup(done ? { completed: true, completedAt: Date.now() } : { completed: deleteField(), completedAt: deleteField() })))
+        toast(done ? t("tripCompletedToast") : t("tripReopenedToast"));
+    };
     if ($("mBecome")) $("mBecome").onclick = becomeAdmin;
     if ($("mDelete")) $("mDelete").onclick = openDelete;
+  });
+}
+
+// ---------- trip dates ----------
+const parseDay = s => { const [y, m, d] = String(s).split("-").map(Number); return new Date(y, m - 1, d) };
+function fmtTripRange(start, end, short) {
+  const a = start || end, b = end || start;
+  if (!a) return "";
+  const da = parseDay(a), db = parseDay(b), sameYear = da.getFullYear() === db.getFullYear();
+  const showYear = !short || !sameYear || da.getFullYear() !== new Date().getFullYear();
+  const opt = { month: lang === "zh-Hant" ? "long" : "short", day: "numeric", ...(showYear ? { year: "numeric" } : {}) };
+  try {
+    const f = new Intl.DateTimeFormat(locale(), opt);
+    return a === b ? f.format(da) : (f.formatRange ? f.formatRange(da, db) : f.format(da) + " – " + f.format(db));
+  } catch { return a === b ? a : a + " – " + b }
+}
+// "starts in 5 days", "day 3 of 7", "ended"
+function tripStatus(start, end) {
+  const a = start || end, b = end || start; if (!a) return "";
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const da = parseDay(a), db = parseDay(b), day = 864e5;
+  if (today < da) { const n = Math.round((da - today) / day); return n === 1 ? t("tripTomorrow") : t("tripInDays", { n }) }
+  if (today > db) return t("tripEnded");
+  const total = Math.round((db - da) / day) + 1, cur = Math.round((today - da) / day) + 1;
+  return total === 1 ? t("tripToday") : t("tripDayOf", { d: cur, n: total });
+}
+function openDates() {
+  openSheet("dates", el => {
+    const can = canEditGroup();
+    el.innerHTML = `${sheetHead(t("tripDates"))}
+      <div class="date-row">
+        <label class="date-field"><span>${esc(t("startDate"))}</span><input type="date" id="dStart" value="${esc(S.startDate || "")}" ${can ? "" : "disabled"}></label>
+        <label class="date-field"><span>${esc(t("endDate"))}</span><input type="date" id="dEnd" value="${esc(S.endDate || "")}" ${can ? "" : "disabled"}></label>
+      </div>
+      <p class="err" id="dErr"></p>
+      ${can ? `<button class="btn primary wide" id="dSave" type="button">${esc(t("save"))}</button>
+      ${S.startDate || S.endDate ? `<button class="btn ghost wide" id="dClear" type="button">${esc(t("clearDates"))}</button>` : ""}` : `<p class="hint">${esc(t("curAdminOnly"))}</p>`}`;
+    wireClose(el);
+    if (!can) return;
+    $("dSave").onclick = async () => {
+      const s = $("dStart").value || null, e = $("dEnd").value || null;
+      if (s && e && e < s) return $("dErr").textContent = t("errDates");
+      await act(() => api.updateGroup({ startDate: s || deleteField(), endDate: e || deleteField() }));
+      closeSheet();
+    };
+    if ($("dClear")) $("dClear").onclick = async () => { await act(() => api.updateGroup({ startDate: deleteField(), endDate: deleteField() })); closeSheet() };
   });
 }
 
@@ -875,7 +941,7 @@ async function deleteGroup() {
 function buildSummary(includeExpenses) {
   const b = balances(S.people, S.expenses), tx = settle(b);
   const total = S.expenses.filter(e => !e.payment).reduce((s, e) => s + e.cents, 0);
-  const lines = [t("sumTitle", { name: S.name }), t("sumTotal", { x: fmtMinor(total), n: S.people.length }), "", t("sumWho")];
+  const lines = [t("sumTitle", { name: S.name }), ...(S.startDate || S.endDate ? [fmtTripRange(S.startDate, S.endDate)] : []), t("sumTotal", { x: fmtMinor(total), n: S.people.length }), "", t("sumWho")];
   if (tx.length) tx.forEach(x => lines.push(t("sumPays", { from: x.from, to: x.to, x: fmtMinor(x.cents) })));
   else lines.push(t("sumEven"));
   lines.push("", t("sumBalances"));
@@ -944,7 +1010,7 @@ async function drawSummaryImage(withExpenses) {
   const hline = (y, color = C.line, w = 2) => { g.fillStyle = color; g.fillRect(P, y, W - 2 * P, w) };
   let y = P + 30;
   txt(S.name, P, y, { size: 52, weight: 700, max: W - 2 * P }); y += 64;
-  txt(t("imgSubtitle", { x: fmtMinor(total), n: S.people.length, date: new Date().toLocaleDateString(locale(), { year: "numeric", month: "short", day: "numeric" }) }), P, y, { size: 28, color: C.muted, max: W - 2 * P }); y += 44 + 40;
+  txt(t("imgSubtitle", { x: fmtMinor(total), n: S.people.length, date: S.startDate || S.endDate ? fmtTripRange(S.startDate, S.endDate) : new Date().toLocaleDateString(locale(), { year: "numeric", month: "short", day: "numeric" }) }), P, y, { size: 28, color: C.muted, max: W - 2 * P }); y += 44 + 40;
 
   // table helper: cols = [{label, w (fraction), align}]
   const table = (title, cols, data) => {
@@ -1071,6 +1137,10 @@ function expenseRow(e, myName) {
 }
 function wireExpenseRows(root) { root.querySelectorAll("[data-exp]").forEach(b => b.onclick = () => openExpense(b.dataset.exp)) }
 
+// The day an expense happened (its date, or when it was added), for sorting and grouping
+const expDay = e => e.date ? parseDay(e.date).getTime() : dayKey(e.createdAt);
+const byNewest = (a, c) => (expDay(c) - expDay(a)) || ((c.createdAt || 0) - (a.createdAt || 0));
+
 // ---------- render group ----------
 function render() {
   const mine = me(), myName = mine.name;
@@ -1081,6 +1151,15 @@ function render() {
 
   // balance card
   $("heroNum").textContent = myNet === 0 ? fmtMinor(0) : (myNet > 0 ? "+" : "−") + fmtMinor(Math.abs(myNet));
+  $("heroDone").hidden = !S.completed;
+  $("heroDone").innerHTML = S.completed ? `${ICON.check}<span>${esc(t("completedTag"))}</span>` : "";
+  document.body.classList.toggle("trip-done", !!S.completed);
+  const hasDates = !!(S.startDate || S.endDate);
+  $("heroDates").hidden = !hasDates;
+  if (hasDates) {
+    const st = S.completed ? "" : tripStatus(S.startDate, S.endDate);
+    $("heroDates").innerHTML = `${ICON.calendar}<span>${esc(fmtTripRange(S.startDate, S.endDate))}</span>${st ? `<span class="hd-status">${esc(st)}</span>` : ""}`;
+  }
   $("heroSub").textContent = (myNet < 0 ? t("youOweOverall") : myNet > 0 ? t("youAreOwed") : t("allSettled")) + (total ? " · " + t("groupSpent", { x: fmtMinor(total) }) : "");
   const myTx = tx.filter(x => x.from === myName || x.to === myName);
   $("heroPays").innerHTML = myTx.map(x => {
@@ -1107,7 +1186,7 @@ function render() {
   $("othersList").innerHTML = others.map(x => `<div class="lrow">${avatar(x.from, "sm")}<span class="txt">${t("xPaysY", { from: `<b>${esc(x.from)}</b>`, to: `<b>${esc(x.to)}</b>` })}</span><span class="amt">${fmtMinor(x.cents)}</span></div>`).join("");
 
   // recent
-  const sorted = [...S.expenses].sort((a, c) => (c.createdAt || 0) - (a.createdAt || 0));
+  const sorted = [...S.expenses].sort(byNewest);
   const empty = !sorted.length;
   $("emptyCard").hidden = !empty; $("recentHead").hidden = empty; $("recentList").hidden = empty;
   $("emptyText").textContent = S.people.length < 2 ? t("emptyInviteText") : t("emptyAddText");
@@ -1124,13 +1203,13 @@ function render() {
 function renderActivity() {
   const mine = me(); if (!mine) return;
   const myName = mine.name;
-  let list = [...S.expenses].sort((a, c) => (c.createdAt || 0) - (a.createdAt || 0));
+  let list = [...S.expenses].sort(byNewest);
   if (actFilter === "mine") list = list.filter(e => !e.payment && e.payer === myName);
   if (actFilter === "repay") list = list.filter(e => e.payment);
   if (!list.length) { $("activityList").innerHTML = `<p class="empty-state">${esc(t("emptyActivity"))}</p>`; return }
   let html = "", last = null;
   for (const e of list) {
-    const k = dayKey(e.createdAt);
+    const k = expDay(e);
     if (k !== last) { html += `<div class="day">${esc(dayLabel(k))}</div>`; last = k }
     html += expenseRow(e, myName);
   }
@@ -1162,6 +1241,7 @@ function openExpense(id) {
       <div style="display:flex;align-items:center;gap:12px">${catIcon(e.desc, e.payment)}<p class="detail-amt num">${fmtMinor(e.cents)}</p></div>
       ${fx ? `<p class="hint">${esc(t("paidOrig", { amount: fmtAmount(e.origAmount, e.origCurrency), from: e.origCurrency, rate: niceRate(e.rate), to: S.currency }))}</p>` : ""}
       <div class="list-card">
+        <div class="kv"><span>${esc(t("date"))}</span><span>${esc(new Date(expDay(e)).toLocaleDateString(locale(), { weekday: "short", year: "numeric", month: "short", day: "numeric" }))}</span></div>
         <div class="kv"><span>${esc(t("paidBy"))}</span><span>${esc(e.payer)}</span></div>
         ${per.map(([p, c]) => `<div class="kv"><span>${esc(p)}</span><span class="num">${fmtMinor(c)}</span></div>`).join("")}
         ${e.addedByName ? `<div class="kv"><span>${esc(t("addedByLabel"))}</span><span>${esc(e.addedByName)}${when ? " · " + esc(when) : ""}</span></div>` : ""}
@@ -1311,7 +1391,7 @@ $("expForm").addEventListener("submit", e => {
     split = checked();
     if (!split.length) return err.textContent = t("errSplit");
   }
-  const entry = { desc, cents, payer: old ? old.payer : me().name, split };
+  const entry = { desc, cents, payer: old ? old.payer : me().name, split, date: $("expDate").value || todayStr() };
   const fxOn = c !== S.currency;
   if (fxOn) Object.assign(entry, { origAmount: amt, origCurrency: c, rate: fx.rate });
   if (splitAmounts) entry.splitAmounts = splitAmounts;

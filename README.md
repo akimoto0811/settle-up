@@ -73,6 +73,12 @@ The app opens on **Your groups**: an overall total across all your groups, then 
 
 Inside a group, **Home** shows your overall balance in the green card, with one-tap **Mark paid** / **Mark received** for your payments, everyone's balance as avatars, and recent expenses. **Activity** lists everything by day, with filters. The round **+** button opens the full-screen Add expense form. Tap any expense for details, **Edit** (amount, currency, description, who's in the split) and **Delete**, or any avatar for that person's Paid / Share / Net.
 
+## Trips: dates and completing
+
+When creating a group you can add optional **trip dates**. They show on the group's card and in the green card inside the group, with a status such as "in 5 days" or "day 3 of 7". Change them in **⋯ → Trip dates**. Each expense also has a **Date** (today by default), and Activity groups expenses by that date.
+
+When the trip is over, an admin can tap **⋯ → Mark trip as completed**. The group moves to a **Completed** section on Your groups and no new expenses can be added, but payments can still be marked and the summary shared. **⋯ → Reopen trip** undoes it.
+
 ## Sharing a summary
 
 On **Home**, **Share summary** creates a message with who pays whom, everyone's balance and (optionally) the full expense list. WhatsApp and Email open with the message filled in. Signal and More apps open the phone's share sheet. Copy text works everywhere.
