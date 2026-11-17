@@ -1,13 +1,17 @@
 // Settle Up — shared bill splitting. Static app (GitHub Pages) + Firebase (Auth + Firestore) for live sync.
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import {
+// Firebase loads in the background (see loadFirebase) so the screen can appear before it arrives
+const FB = "https://www.gstatic.com/firebasejs/10.12.2/";
+let initializeApp,
   getAuth, signInAnonymously, onAuthStateChanged, GoogleAuthProvider, signInWithPopup,
-  sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, signOut
-} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import {
+  sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, signOut,
   getFirestore, initializeFirestore, deleteField, persistentLocalCache, persistentMultipleTabManager, doc, collection, setDoc, addDoc, deleteDoc, updateDoc, getDoc, getDocs, onSnapshot,
-  serverTimestamp, writeBatch
-} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+  serverTimestamp, writeBatch;
+async function loadFirebase() {
+  const [a, au, fs] = await Promise.all([import(FB + "firebase-app.js"), import(FB + "firebase-auth.js"), import(FB + "firebase-firestore.js")]);
+  ({ initializeApp } = a);
+  ({ getAuth, signInAnonymously, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, signOut } = au);
+  ({ getFirestore, initializeFirestore, deleteField, persistentLocalCache, persistentMultipleTabManager, doc, collection, setDoc, addDoc, deleteDoc, updateDoc, getDoc, getDocs, onSnapshot, serverTimestamp, writeBatch } = fs);
+}
 import { firebaseConfig } from "./firebase-config.js";
 import { t, setLang, applyStatic, lang, locale } from "./i18n.js";
 
@@ -271,9 +275,13 @@ async function showStart() {
 async function groupSummary(gid) {
   try {
     const gref = doc(db, "groups", gid);
-    const gs = await getDoc(gref);
+    // Ask for the group, its people and its expenses at the same time
+    const [g1, p1, e1] = await Promise.allSettled([getDoc(gref), getDocs(collection(gref, "people")), getDocs(collection(gref, "expenses"))]);
+    if (g1.status !== "fulfilled") return undefined;
+    const gs = g1.value;
     if (!gs.exists()) return gs.metadata?.fromCache ? undefined : null;   // null = deleted
-    const [pp, ex] = await Promise.all([getDocs(collection(gref, "people")), getDocs(collection(gref, "expenses"))]);
+    if (p1.status !== "fulfilled" || e1.status !== "fulfilled") return undefined;
+    const pp = p1.value, ex = e1.value;
     const people = pp.docs.map(d => d.data());
     const mine = people.find(p => p.uid && p.uid === uid);
     const exps = ex.docs.map(d => d.data());
@@ -284,6 +292,8 @@ async function groupSummary(gid) {
 }
 function renderHome() {
   if (S.id) return;
+  // Remember what we showed, so next launch can show it instantly
+  store.set("settleup.home", { list: homeList, sums: homeSums, uid });
   const has = homeList.length > 0;
   $("homeHero").hidden = !has;
   const card = g => {
@@ -1434,7 +1444,20 @@ $("langSel").onchange = e => { setLang(e.target.value); applyLanguage() };
 applyLanguage();
 
 // ---------- boot ----------
+// Show Your groups straight away from last time, while Firebase loads
+function paintCachedHome() {
+  if (location.hash.length > 1 || isEmailLinkUrl()) return;
+  const c = store.get("settleup.home", null);
+  if (!c || !c.list || !c.list.length) return;
+  homeList = c.list; homeSums = c.sums || {};
+  show("start");
+  $("newGroupBtn").hidden = false;
+  renderHome();
+}
+const isEmailLinkUrl = () => /[?&]mode=signIn/.test(location.search) || /[?&]signin=1/.test(location.search);
+
 async function boot() {
+  await loadFirebase();
   const app = initializeApp(firebaseConfig);
   // Keep a copy of groups on the phone so they open instantly and work offline
   try { db = initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) }) }
@@ -1465,7 +1488,7 @@ async function boot() {
 }
 if (!firebaseConfig || !firebaseConfig.apiKey || firebaseConfig.apiKey.startsWith("PASTE")) {
   status(t("setupNeeded"), true);
-} else boot();
+} else { paintCachedHome(); boot().catch(e => { console.error(e); status(t("connectFail"), true) }) }
 
 // ---------- pull to refresh (home-screen app only; browsers have their own) ----------
 const standalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
@@ -1500,3 +1523,9 @@ if (standalone) {
 // Block pinch-zoom on iOS Safari, which ignores user-scalable=no
 document.addEventListener("gesturestart", e => e.preventDefault(), { passive: false });
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => { });
+
+// A new version of the app was saved in the background: it applies next time the app opens
+if ("serviceWorker" in navigator) navigator.serviceWorker.addEventListener("message", e => {
+  if (e.data && e.data.type === "updated" && hadController) toast(t("updateReady"));
+});
+const hadController = !!(navigator.serviceWorker && navigator.serviceWorker.controller);
