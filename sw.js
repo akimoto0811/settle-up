@@ -1,7 +1,7 @@
 // Keeps one complete copy of the app on the phone so it opens instantly.
 // Each new version (a new CACHE name) is downloaded in full, bypassing any stale copies,
 // and replaces the old one in one go. Data sync is handled by Firebase.
-const CACHE = "settleup-v20";
+const CACHE = "settleup-v21";
 const SHELL = ["./", "index.html", "style.css", "app.js", "i18n.js", "firebase-config.js", "manifest.webmanifest", "icons/icon-192.png", "icons/icon-512.png"];
 const FIREBASE = /^https:\/\/www\.gstatic\.com\/firebasejs\//;   // versioned, never changes
 const FONT_FILES = /^https:\/\/fonts\.gstatic\.com\//;           // versioned, never changes

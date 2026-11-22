@@ -656,10 +656,20 @@ function showForm() {
 }
 let kind = "expense";
 function setKind(k) {
+  if (k === kind) return;
   kind = k;
   $("kindSeg").querySelectorAll("[data-k]").forEach(b => b.classList.toggle("on", b.dataset.k === k));
   formLabels();
+  if (k === "income") owesDefaults(); else { document.querySelectorAll("#splitOpts input").forEach(i => i.checked = true); preview() }
 }
+// "Someone owes": by default it's owed to everyone except the person who owes
+function owesDefaults() {
+  const debtor = $("payerSel").value;
+  document.querySelectorAll("#splitOpts input").forEach(i => i.checked = i.value !== debtor);
+  if (splitMode === "exact") renderExact();
+  preview();
+}
+$("payerSel").addEventListener("change", () => { if (kind === "income") owesDefaults() });
 $("kindSeg").addEventListener("click", e => { const b = e.target.closest("[data-k]"); if (b) setKind(b.dataset.k) });
 // Identifies the form being filled, so the chosen payer survives live updates but resets for a new form
 let formSeq = 0;
@@ -674,14 +684,19 @@ function formLabels() {
   $("desc").placeholder = inc ? t("incomePh") : t("whatForPh");
   $("splitEqualLabel").textContent = inc ? t("shareEqually") : t("splitEqually");
   const m = me(), current = e ? e.payer : m?.name;
-  // Admins can record expenses for anyone; everyone else records their own
-  const pick = amAdmin();
+  // Admins can record expenses for anyone; everyone else records their own.
+  // Anyone can record that someone owes (e.g. who lost the game).
+  const pick = amAdmin() || inc;
   $("payerSel").hidden = !pick; $("paidByVal").hidden = pick;
   if (pick) {
-    const keep = $("payerSel").dataset.form === formKey() ? $("payerSel").value : current;
+    const key = formKey() + ":" + kind;
+    // For "someone owes", start with the first other person rather than yourself
+    const firstOther = S.people.find(p => p !== m?.name) || current;
+    const fallback = inc && !e ? firstOther : current;
+    const keep = $("payerSel").dataset.form === key ? $("payerSel").value : fallback;
     $("payerSel").innerHTML = S.people.map(p => `<option value="${esc(p)}">${esc(p === m?.name ? p + t("youSuffix") : p)}</option>`).join("");
-    $("payerSel").value = S.people.includes(keep) ? keep : current;
-    $("payerSel").dataset.form = formKey();
+    $("payerSel").value = S.people.includes(keep) ? keep : fallback;
+    $("payerSel").dataset.form = key;
   } else $("paidByVal").textContent = current === m?.name ? t("you") : current;
 }
 function openAdd() {
@@ -1004,7 +1019,7 @@ let includeExp = store.get("settleup.sumExp", true);
 
 // Per person: what they paid and their share of expenses (repayments excluded), and net balance
 // What the group spent: expenses minus refunds and income (repayments don't count)
-function netSpent() { return S.expenses.filter(e => !e.payment).reduce((x, e) => x + (e.kind === "income" ? -e.cents : e.cents), 0) }
+function netSpent() { return S.expenses.filter(e => !e.payment && e.kind !== "income").reduce((x, e) => x + e.cents, 0) }
 function breakdown() {
   const b = balances(S.people, S.expenses);
   const rows = S.people.map(p => ({ name: p, paid: 0, share: 0, net: b[p] }));
@@ -1012,9 +1027,13 @@ function breakdown() {
   let hasPayments = false;
   for (const e of S.expenses) {
     if (e.payment) { hasPayments = true; continue }
-    const sign = e.kind === "income" ? -1 : 1;
-    if (by[e.payer]) by[e.payer].paid += sign * e.cents;
-    for (const [p, c] of expShares(e)) if (by[p]) by[p].share += sign * c;
+    if (e.kind === "income") {   // "someone owes": their whole amount is their share; the others are owed theirs
+      if (by[e.payer]) by[e.payer].share += e.cents;
+      for (const [p, c] of expShares(e)) if (by[p]) by[p].paid += c;
+      continue;
+    }
+    if (by[e.payer]) by[e.payer].paid += e.cents;
+    for (const [p, c] of expShares(e)) if (by[p]) by[p].share += c;
   }
   return { rows: rows.sort((a, c) => c.net - a.net), tx: settle(b), hasPayments };
 }
@@ -1077,7 +1096,7 @@ async function drawSummaryImage(withExpenses) {
     rows.map(r => [r.name, fmtMinor(r.paid), fmtMinor(r.share), { v: sign(r.net) + fmtMinor(Math.abs(r.net)), color: r.net > 0 ? C.accent : r.net < 0 ? C.owe : C.muted, bold: true }]));
   if (hasPayments) { y -= 24; txt(t("netNote"), P, y, { size: 24, color: C.muted }); y += 52 }
   if (shownExps.length) {
-    const data = shownExps.map(e => [e.desc + (e.kind === "income" ? " ↩" : ""), e.payer, { v: (e.kind === "income" ? "−" : "") + fmtMinor(e.cents) + (e.origCurrency && e.origCurrency !== S.currency ? "*" : "") }]);
+    const data = shownExps.map(e => [e.desc, e.kind === "income" ? t("xOwesShort", { name: e.payer }) : e.payer, { v: fmtMinor(e.cents) + (e.origCurrency && e.origCurrency !== S.currency ? "*" : "") }]);
     if (exps.length > MAXEXP) data.push([{ v: t("moreRows", { n: exps.length - MAXEXP }), color: C.muted }, "", ""]);
     table(t("sumExpenses").replace(/\*/g, ""), [{ label: t("colItem"), w: .5 }, { label: t("colPaidBy"), w: .26 }, { label: t("colAmount"), w: .24, align: "right" }], data);
     if (shownExps.some(e => e.origCurrency && e.origCurrency !== S.currency)) { y -= 24; txt(t("fxStar"), P, y, { size: 24, color: C.muted }); y += 52 }
@@ -1168,7 +1187,7 @@ function expenseRow(e, myName) {
     title = t("repaidLine", { from: e.payer === myName ? t("you") : e.payer, to: e.split[0] === myName ? t("youObj") : e.split[0] });
     sub = t("repayment");
   } else if (e.kind === "income") {
-    sub = (e.payer === myName ? t("youReceived") : t("xReceived", { name: e.payer })) + " · " + (fx ? fmtAmount(e.origAmount, e.origCurrency) : e.splitAmounts ? t("splitCustom") : t("splitWays", { n: e.split.length }));
+    sub = (e.payer === myName ? t("youReceived") : t("xReceived", { name: e.payer })) + " · " + (fx ? fmtAmount(e.origAmount, e.origCurrency) : t("owedToN", { n: e.split.length }));
     const myShare = (expShares(e).find(([p]) => p === myName) || [, 0])[1];
     if (e.payer === myName) { const hold = e.cents - myShare; end2 = hold > 0 ? `<div class="sub owe-t">${esc(t("youOweX", { x: fmtMinor(hold) }))}</div>` : "" }
     else if (myShare) end2 = `<div class="sub get-t">${esc(t("youGetX", { x: fmtMinor(myShare) }))}</div>`;
@@ -1180,7 +1199,7 @@ function expenseRow(e, myName) {
     else if (myShare) end2 = `<div class="sub owe-t">${esc(t("youOweX", { x: fmtMinor(myShare) }))}</div>`;
     else end2 = `<div class="sub">${esc(t("notInvolved"))}</div>`;
   }
-  return `<button class="it" type="button" data-exp="${esc(e.id)}">${catIcon(e.desc, e.payment || e.kind === "income")}<div class="mid"><div class="ttl">${esc(title)}</div><div class="sub">${esc(sub)}</div></div><div class="end"><div class="v ${e.kind === "income" ? "get-t" : ""}">${e.kind === "income" ? "+" : ""}${fmtMinor(e.cents)}</div>${end2}</div></button>`;
+  return `<button class="it" type="button" data-exp="${esc(e.id)}">${catIcon(e.desc, e.payment || e.kind === "income")}<div class="mid"><div class="ttl">${esc(title)}</div><div class="sub">${esc(sub)}</div></div><div class="end"><div class="v">${fmtMinor(e.cents)}</div>${end2}</div></button>`;
 }
 function wireExpenseRows(root) { root.querySelectorAll("[data-exp]").forEach(b => b.onclick = () => openExpense(b.dataset.exp)) }
 
@@ -1438,7 +1457,7 @@ $("expForm").addEventListener("submit", e => {
     split = checked();
     if (!split.length) return err.textContent = t("errSplit");
   }
-  const payer = amAdmin() && S.people.includes($("payerSel").value) ? $("payerSel").value : (old ? old.payer : me().name);
+  const payer = (amAdmin() || kind === "income") && S.people.includes($("payerSel").value) ? $("payerSel").value : (old ? old.payer : me().name);
   const entry = { desc, cents, payer, split, date: $("expDate").value || todayStr(), ...(kind === "income" ? { kind: "income" } : {}) };
   const fxOn = c !== S.currency;
   if (fxOn) Object.assign(entry, { origAmount: amt, origCurrency: c, rate: fx.rate });

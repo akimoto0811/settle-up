@@ -96,7 +96,7 @@ The home currency can only be changed before the first expense is added.
 
 - Each device joins as one person. On iPhone, the home-screen app and Safari count as separate devices, so after adding it to the home screen you'll pick your name once more. Your name will show "joined on another device." Tap it twice to move it to this device.
 - You can only edit or delete expenses you added yourself (admins can edit or delete any). Admins can also choose who paid, to log an expense on someone's behalf.
-- Use **Refund / income** at the top of the Add form for money the group gets back, such as a deposit or a refund. Pick who received it and who it's shared with; it lowers what those people owe.
+- Use **Someone owes** at the top of the Add form when someone owes others without anything being bought, for example whoever lost a game, or someone holding a deposit that was refunded. Pick who owes and who they owe; it adds to what that person owes and lowers what the others owe. It doesn't count as group spending.
 - When adding or editing, choose **Equally** to split evenly, or **Exact amounts** to type what each person owes. The amounts must add up to the total.
 - The group link works like a key. Anyone who has it can add or delete expenses, so only share it with the group.
 - Firebase's free plan covers far more than a friend group will use (50,000 reads and 20,000 writes a day).
