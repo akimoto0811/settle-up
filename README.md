@@ -16,7 +16,7 @@ Setup takes about 15 minutes, once.
 3. In the left menu: **Build → Authentication → Get started → Sign-in method → Anonymous → Enable → Save**.
    (This gives each phone a hidden ID so the database can block random bots. Your friends never see a login.)
 4. Left menu: **Build → Firestore Database → Create database** → pick a location near you → **Start in production mode** → **Create**.
-5. In Firestore, open the **Rules** tab (repeat this whenever `firestore.rules` changes), delete what's there, paste everything from `firestore.rules`, and click **Publish**.
+5. In Firestore, open the **Rules** tab, delete what's there, paste everything from `firestore.rules`, and click **Publish**. After that, changes to `firestore.rules` are published automatically (see *Automatic rules deploy* below).
 6. Click the gear icon → **Project settings** → scroll to **Your apps** → click the **`</>`** (Web) icon → name it `settle-up` → **Register app**. Leave "Firebase Hosting" unticked.
 7. Firebase shows a `firebaseConfig = { ... }` block. Copy those values into `firebase-config.js`, replacing each `PASTE_...` value.
 
@@ -102,6 +102,10 @@ The home currency can only be changed before the first expense is added.
 - Firebase's free plan covers far more than a friend group will use (50,000 reads and 20,000 writes a day).
 - To change the app later, edit the files and upload them to the repo again. Phones pick up the new version the next time they open it.
 - The `firebase-config.js` values are meant to be public. The security rules in `firestore.rules` are what protect the data.
+
+## Automatic rules deploy
+
+Whenever `firestore.rules` changes on `main`, the GitHub Action in `.github/workflows/deploy-firestore-rules.yml` publishes it to Firebase. It uses the `FIREBASE_SERVICE_ACCOUNT` repository secret (a Firebase service account key). That service account needs the **Firebase Rules Admin** role in Google Cloud IAM. You can also run it by hand from the repo's **Actions** tab.
 
 ## Files
 
