@@ -1,6 +1,6 @@
 // Makes the app open instantly: files are served from the phone first and refreshed in the background.
 // Data sync is handled by Firebase.
-const CACHE = "settleup-v18";
+const CACHE = "settleup-v19";
 const SHELL = ["./", "index.html", "style.css", "app.js", "i18n.js", "firebase-config.js", "manifest.webmanifest", "icons/icon-192.png"];
 const FIREBASE = /^https:\/\/www\.gstatic\.com\/firebasejs\//;   // versioned, never changes
 const FONT_FILES = /^https:\/\/fonts\.gstatic\.com\//;           // versioned, never changes

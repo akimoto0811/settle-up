@@ -169,6 +169,10 @@
       <h2 id="addTitle">Add expense</h2>
       <span style="width:40px"></span>
     </div>
+    <div class="seg kind-seg" id="kindSeg">
+      <button type="button" data-k="expense" class="on" data-i18n="kindExpense">Expense</button>
+      <button type="button" data-k="income" data-i18n="kindIncome">Refund / income</button>
+    </div>
     <div class="amount-hero">
       <input id="amount" class="amount-input num" inputmode="decimal" placeholder="0.00" autocomplete="off" aria-label="Amount">
       <label class="cur-chip"><span id="curChipText">USD</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg><select id="expCurrency" class="currency-select" aria-label="Currency"></select></label>
@@ -184,13 +188,13 @@
     </div>
     <label class="field-row"><span class="cat-icon" id="descIcon"></span><input id="desc" data-i18n-ph="whatForPh" placeholder="Dinner, taxi, groceries…" maxlength="60" autocomplete="off"></label>
     <label class="field-row static date-row-in"><span class="muted" data-i18n="date">Date</span><input type="date" id="expDate" class="right-input"></label>
-    <div class="field-row static"><span class="muted" data-i18n="paidBy">Paid by</span><span class="right" id="paidByVal">You</span></div>
+    <div class="field-row static"><span class="muted" id="payerLabel">Paid by</span><span class="right" id="paidByVal">You</span><select id="payerSel" class="payer-sel" hidden aria-label="Paid by"></select></div>
     <div class="seg" id="splitMode" role="tablist">
       <button type="button" data-m="equal" class="on" data-i18n="splitEqual">Equally</button>
       <button type="button" data-m="exact" data-i18n="splitExact">Exact amounts</button>
     </div>
     <div id="equalBox">
-      <div class="split-head"><span data-i18n="splitEqually">Split equally</span><span><button type="button" class="link" id="selAll" data-i18n="all">All</button> · <button type="button" class="link" id="selNone" data-i18n="none">None</button></span></div>
+      <div class="split-head"><span id="splitEqualLabel">Split equally</span><span><button type="button" class="link" id="selAll" data-i18n="all">All</button> · <button type="button" class="link" id="selNone" data-i18n="none">None</button></span></div>
       <div class="split-opts" id="splitOpts"></div>
     </div>
     <div id="exactBox" hidden>

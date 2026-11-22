@@ -116,8 +116,9 @@ export function expShares(e) {
 export function balances(people, expenses) {
   const b = Object.fromEntries(people.map(p => [p, 0]));
   for (const e of expenses) {
-    if (b[e.payer] !== undefined) b[e.payer] += e.cents;
-    for (const [p, c] of expShares(e)) if (b[p] !== undefined) b[p] -= c;
+    const sign = e.kind === "income" ? -1 : 1;   // refund/income: the receiver owes each person their share
+    if (b[e.payer] !== undefined) b[e.payer] += sign * e.cents;
+    for (const [p, c] of expShares(e)) if (b[p] !== undefined) b[p] -= sign * c;
   }
   return b;
 }
@@ -641,6 +642,7 @@ let editingId = null, splitMode = "equal";
 const todayStr = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}` };
 const dayStr = ts => { const d = new Date(ts); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}` };
 function resetForm() {
+  formSeq++; kind = "expense"; $("kindSeg").querySelectorAll("[data-k]").forEach(b => b.classList.toggle("on", b.dataset.k === "expense"));
   $("amount").value = ""; $("desc").value = ""; $("expErr").textContent = "";
   $("expDate").value = todayStr();
   $("splitOpts").innerHTML = ""; $("exactList").innerHTML = "";
@@ -652,11 +654,35 @@ function showForm() {
     renderSplit(); refreshFxLabels(); preview(); updateDescIcon(); formLabels();
   });
 }
+let kind = "expense";
+function setKind(k) {
+  kind = k;
+  $("kindSeg").querySelectorAll("[data-k]").forEach(b => b.classList.toggle("on", b.dataset.k === k));
+  formLabels();
+}
+$("kindSeg").addEventListener("click", e => { const b = e.target.closest("[data-k]"); if (b) setKind(b.dataset.k) });
+// Identifies the form being filled, so the chosen payer survives live updates but resets for a new form
+let formSeq = 0;
+const formKey = () => (editingId || "new") + ":" + formSeq;
 function formLabels() {
   const e = editingId && S.expenses.find(x => x.id === editingId);
-  $("addTitle").textContent = editingId ? t("editExpense") : t("addExpenseTitle");
-  $("saveBtn").textContent = editingId ? t("saveChanges") : t("addExpense");
-  $("paidByVal").textContent = e ? (e.payer === me()?.name ? t("you") : e.payer) : t("you");
+  const inc = kind === "income";
+  $("addTitle").textContent = editingId ? (inc ? t("editIncome") : t("editExpense")) : (inc ? t("addIncomeTitle") : t("addExpenseTitle"));
+  $("saveBtn").textContent = editingId ? t("saveChanges") : (inc ? t("addIncome") : t("addExpense"));
+  $("payerLabel").textContent = inc ? t("receivedBy") : t("paidBy");
+  $("payerSel").setAttribute("aria-label", $("payerLabel").textContent);
+  $("desc").placeholder = inc ? t("incomePh") : t("whatForPh");
+  $("splitEqualLabel").textContent = inc ? t("shareEqually") : t("splitEqually");
+  const m = me(), current = e ? e.payer : m?.name;
+  // Admins can record expenses for anyone; everyone else records their own
+  const pick = amAdmin();
+  $("payerSel").hidden = !pick; $("paidByVal").hidden = pick;
+  if (pick) {
+    const keep = $("payerSel").dataset.form === formKey() ? $("payerSel").value : current;
+    $("payerSel").innerHTML = S.people.map(p => `<option value="${esc(p)}">${esc(p === m?.name ? p + t("youSuffix") : p)}</option>`).join("");
+    $("payerSel").value = S.people.includes(keep) ? keep : current;
+    $("payerSel").dataset.form = formKey();
+  } else $("paidByVal").textContent = current === m?.name ? t("you") : current;
 }
 function openAdd() {
   if (!me()) return;
@@ -671,6 +697,8 @@ function openEdit(id) {
   editingId = id;
   resetForm();
   $("expDate").value = e.date || (e.createdAt ? dayStr(e.createdAt) : todayStr());
+  kind = e.kind === "income" ? "income" : "expense";
+  $("kindSeg").querySelectorAll("[data-k]").forEach(b => b.classList.toggle("on", b.dataset.k === kind));
   const fxE = e.origCurrency && e.origCurrency !== S.currency;
   const cur = fxE ? e.origCurrency : S.currency;
   const sel = $("expCurrency"); sel.dataset.group = S.id; sel.value = cur;
@@ -950,7 +978,7 @@ async function deleteGroup() {
 // ---------- share summary ----------
 function buildSummary(includeExpenses) {
   const b = balances(S.people, S.expenses), tx = settle(b);
-  const total = S.expenses.filter(e => !e.payment).reduce((s, e) => s + e.cents, 0);
+  const total = netSpent();
   const lines = [t("sumTitle", { name: S.name }), ...(S.startDate || S.endDate ? [fmtTripRange(S.startDate, S.endDate)] : []), t("sumTotal", { x: fmtMinor(total), n: S.people.length }), "", t("sumWho")];
   if (tx.length) tx.forEach(x => lines.push(t("sumPays", { from: x.from, to: x.to, x: fmtMinor(x.cents) })));
   else lines.push(t("sumEven"));
@@ -965,7 +993,7 @@ function buildSummary(includeExpenses) {
     exps.forEach(e => {
       const fx = e.origCurrency && e.origCurrency !== S.currency;
       if (fx) anyFx = true;
-      lines.push(t("sumExpLine", { desc: e.desc, x: fmtMinor(e.cents), orig: fx ? ` (${fmtAmount(e.origAmount, e.origCurrency)})` : "", payer: e.payer }));
+      lines.push(t(e.kind === "income" ? "sumIncomeLine" : "sumExpLine", { desc: e.desc, x: fmtMinor(e.cents), orig: fx ? ` (${fmtAmount(e.origAmount, e.origCurrency)})` : "", payer: e.payer }));
     });
     if (anyFx) lines.push(t("sumFx"));
   }
@@ -975,6 +1003,8 @@ function buildSummary(includeExpenses) {
 let includeExp = store.get("settleup.sumExp", true);
 
 // Per person: what they paid and their share of expenses (repayments excluded), and net balance
+// What the group spent: expenses minus refunds and income (repayments don't count)
+function netSpent() { return S.expenses.filter(e => !e.payment).reduce((x, e) => x + (e.kind === "income" ? -e.cents : e.cents), 0) }
 function breakdown() {
   const b = balances(S.people, S.expenses);
   const rows = S.people.map(p => ({ name: p, paid: 0, share: 0, net: b[p] }));
@@ -982,8 +1012,9 @@ function breakdown() {
   let hasPayments = false;
   for (const e of S.expenses) {
     if (e.payment) { hasPayments = true; continue }
-    if (by[e.payer]) by[e.payer].paid += e.cents;
-    for (const [p, c] of expShares(e)) if (by[p]) by[p].share += c;
+    const sign = e.kind === "income" ? -1 : 1;
+    if (by[e.payer]) by[e.payer].paid += sign * e.cents;
+    for (const [p, c] of expShares(e)) if (by[p]) by[p].share += sign * c;
   }
   return { rows: rows.sort((a, c) => c.net - a.net), tx: settle(b), hasPayments };
 }
@@ -992,7 +1023,7 @@ function breakdown() {
 async function drawSummaryImage(withExpenses) {
   try { await document.fonts.ready } catch { }
   const { rows, tx, hasPayments } = breakdown();
-  const total = S.expenses.filter(e => !e.payment).reduce((x, e) => x + e.cents, 0);
+  const total = netSpent();
   const exps = withExpenses ? S.expenses.filter(e => !e.payment).sort((a, c) => (a.createdAt || 0) - (c.createdAt || 0)) : [];
   const MAXEXP = 40, shownExps = exps.slice(0, MAXEXP);
   const W = 1080, P = 64, RH = 64, font = getComputedStyle(document.body).fontFamily;
@@ -1046,7 +1077,7 @@ async function drawSummaryImage(withExpenses) {
     rows.map(r => [r.name, fmtMinor(r.paid), fmtMinor(r.share), { v: sign(r.net) + fmtMinor(Math.abs(r.net)), color: r.net > 0 ? C.accent : r.net < 0 ? C.owe : C.muted, bold: true }]));
   if (hasPayments) { y -= 24; txt(t("netNote"), P, y, { size: 24, color: C.muted }); y += 52 }
   if (shownExps.length) {
-    const data = shownExps.map(e => [e.desc, e.payer, { v: fmtMinor(e.cents) + (e.origCurrency && e.origCurrency !== S.currency ? "*" : "") }]);
+    const data = shownExps.map(e => [e.desc + (e.kind === "income" ? " ↩" : ""), e.payer, { v: (e.kind === "income" ? "−" : "") + fmtMinor(e.cents) + (e.origCurrency && e.origCurrency !== S.currency ? "*" : "") }]);
     if (exps.length > MAXEXP) data.push([{ v: t("moreRows", { n: exps.length - MAXEXP }), color: C.muted }, "", ""]);
     table(t("sumExpenses").replace(/\*/g, ""), [{ label: t("colItem"), w: .5 }, { label: t("colPaidBy"), w: .26 }, { label: t("colAmount"), w: .24, align: "right" }], data);
     if (shownExps.some(e => e.origCurrency && e.origCurrency !== S.currency)) { y -= 24; txt(t("fxStar"), P, y, { size: 24, color: C.muted }); y += 52 }
@@ -1136,6 +1167,12 @@ function expenseRow(e, myName) {
   if (e.payment) {
     title = t("repaidLine", { from: e.payer === myName ? t("you") : e.payer, to: e.split[0] === myName ? t("youObj") : e.split[0] });
     sub = t("repayment");
+  } else if (e.kind === "income") {
+    sub = (e.payer === myName ? t("youReceived") : t("xReceived", { name: e.payer })) + " · " + (fx ? fmtAmount(e.origAmount, e.origCurrency) : e.splitAmounts ? t("splitCustom") : t("splitWays", { n: e.split.length }));
+    const myShare = (expShares(e).find(([p]) => p === myName) || [, 0])[1];
+    if (e.payer === myName) { const hold = e.cents - myShare; end2 = hold > 0 ? `<div class="sub owe-t">${esc(t("youOweX", { x: fmtMinor(hold) }))}</div>` : "" }
+    else if (myShare) end2 = `<div class="sub get-t">${esc(t("youGetX", { x: fmtMinor(myShare) }))}</div>`;
+    else end2 = `<div class="sub">${esc(t("notInvolved"))}</div>`;
   } else {
     sub = (e.payer === myName ? t("youPaid") : t("xPaid", { name: e.payer })) + " · " + (fx ? fmtAmount(e.origAmount, e.origCurrency) : e.splitAmounts ? t("splitCustom") : t("splitWays", { n: e.split.length }));
     const myShare = (expShares(e).find(([p]) => p === myName) || [, 0])[1];
@@ -1143,7 +1180,7 @@ function expenseRow(e, myName) {
     else if (myShare) end2 = `<div class="sub owe-t">${esc(t("youOweX", { x: fmtMinor(myShare) }))}</div>`;
     else end2 = `<div class="sub">${esc(t("notInvolved"))}</div>`;
   }
-  return `<button class="it" type="button" data-exp="${esc(e.id)}">${catIcon(e.desc, e.payment)}<div class="mid"><div class="ttl">${esc(title)}</div><div class="sub">${esc(sub)}</div></div><div class="end"><div class="v">${fmtMinor(e.cents)}</div>${end2}</div></button>`;
+  return `<button class="it" type="button" data-exp="${esc(e.id)}">${catIcon(e.desc, e.payment || e.kind === "income")}<div class="mid"><div class="ttl">${esc(title)}</div><div class="sub">${esc(sub)}</div></div><div class="end"><div class="v ${e.kind === "income" ? "get-t" : ""}">${e.kind === "income" ? "+" : ""}${fmtMinor(e.cents)}</div>${end2}</div></button>`;
 }
 function wireExpenseRows(root) { root.querySelectorAll("[data-exp]").forEach(b => b.onclick = () => openExpense(b.dataset.exp)) }
 
@@ -1156,7 +1193,7 @@ function render() {
   const mine = me(), myName = mine.name;
   $("gName").textContent = S.name;
   const b = balances(S.people, S.expenses), tx = settle(b);
-  const total = S.expenses.filter(e => !e.payment).reduce((x, e) => x + e.cents, 0);
+  const total = netSpent();
   const myNet = b[myName] || 0;
 
   // balance card
@@ -1252,7 +1289,7 @@ function openExpense(id) {
       ${fx ? `<p class="hint">${esc(t("paidOrig", { amount: fmtAmount(e.origAmount, e.origCurrency), from: e.origCurrency, rate: niceRate(e.rate), to: S.currency }))}</p>` : ""}
       <div class="list-card">
         <div class="kv"><span>${esc(t("date"))}</span><span>${esc(new Date(expDay(e)).toLocaleDateString(locale(), { weekday: "short", year: "numeric", month: "short", day: "numeric" }))}</span></div>
-        <div class="kv"><span>${esc(t("paidBy"))}</span><span>${esc(e.payer)}</span></div>
+        <div class="kv"><span>${esc(e.kind === "income" ? t("receivedBy") : t("paidBy"))}</span><span>${esc(e.payer)}</span></div>
         ${per.map(([p, c]) => `<div class="kv"><span>${esc(p)}</span><span class="num">${fmtMinor(c)}</span></div>`).join("")}
         ${e.addedByName ? `<div class="kv"><span>${esc(t("addedByLabel"))}</span><span>${esc(e.addedByName)}${when ? " · " + esc(when) : ""}</span></div>` : ""}
         ${e.editedAt ? `<div class="kv"><span>${esc(t("editedLabel"))}</span><span>${esc(e.editedByName || "")}${e.editedByName ? " · " : ""}${esc(new Date(e.editedAt).toLocaleString(locale(), { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }))}</span></div>` : ""}
@@ -1401,7 +1438,8 @@ $("expForm").addEventListener("submit", e => {
     split = checked();
     if (!split.length) return err.textContent = t("errSplit");
   }
-  const entry = { desc, cents, payer: old ? old.payer : me().name, split, date: $("expDate").value || todayStr() };
+  const payer = amAdmin() && S.people.includes($("payerSel").value) ? $("payerSel").value : (old ? old.payer : me().name);
+  const entry = { desc, cents, payer, split, date: $("expDate").value || todayStr(), ...(kind === "income" ? { kind: "income" } : {}) };
   const fxOn = c !== S.currency;
   if (fxOn) Object.assign(entry, { origAmount: amt, origCurrency: c, rate: fx.rate });
   if (splitAmounts) entry.splitAmounts = splitAmounts;
@@ -1414,6 +1452,7 @@ $("expForm").addEventListener("submit", e => {
     if (!fxOn) Object.assign(patch, { origAmount: deleteField(), origCurrency: deleteField(), rate: deleteField() });
     if (!splitAmounts) patch.splitAmounts = deleteField();
     if (!splitOrig) patch.splitOrig = deleteField();
+    if (kind !== "income") patch.kind = deleteField();
     act(() => api.editExpense(id, patch));
     editingId = null; $("expCurrency").dataset.group = "";
     closeSheet(); toast(t("editedToast"));
@@ -1422,7 +1461,7 @@ $("expForm").addEventListener("submit", e => {
   act(() => api.addExpense(entry));
   resetForm(); updateDescIcon();
   closeSheet(); tab = "home"; show("group"); window.scrollTo({ top: 0 });
-  toast(t("addedToast"));
+  toast(kind === "income" ? t("incomeAddedToast") : t("addedToast"));
 });
 
 // ---------- language ----------

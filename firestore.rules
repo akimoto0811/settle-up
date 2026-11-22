@@ -109,7 +109,7 @@ service cloud.firestore {
         // Edit an expense you added (admins: any). Who added it, who paid and repayments can't change.
         allow update: if signedIn() && exists(g(gid))
           && request.resource.data.get('addedBy', null) == resource.data.get('addedBy', null)
-          && request.resource.data.payer == resource.data.payer
+          && (request.resource.data.payer == resource.data.payer || isAdmin(gid))
           && resource.data.get('payment', false) == false
           && request.resource.data.get('payment', false) == false
           && request.resource.data.desc is string && request.resource.data.desc.size() <= 80

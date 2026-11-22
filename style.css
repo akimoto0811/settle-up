@@ -394,3 +394,7 @@ html{background:var(--bg)}
 .hero-done svg{width:15px;height:15px}
 body.trip-done .dock .plus{background:var(--muted);box-shadow:none}
 .group-cards.done .gcard{opacity:.75}
+
+/* refund / income + payer picker */
+.kind-seg{margin:6px 0 0}
+.payer-sel{margin-left:auto;width:auto;max-width:60%;border:0;background:transparent;padding:4px 0;font-weight:600;text-align:right}
