@@ -1561,10 +1561,20 @@ if (standalone) {
 
 // Block pinch-zoom on iOS Safari, which ignores user-scalable=no
 document.addEventListener("gesturestart", e => e.preventDefault(), { passive: false });
-if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => { });
-
-// A new version of the app was saved in the background: it applies next time the app opens
-if ("serviceWorker" in navigator) navigator.serviceWorker.addEventListener("message", e => {
-  if (e.data && e.data.type === "updated" && hadController) toast(t("updateReady"));
-});
+// ---------- app updates ----------
+// The phone keeps one complete copy of the app. A new version downloads in full in the background,
+// then the app switches to it in one go (straight away if nothing is open, otherwise on next open).
 const hadController = !!(navigator.serviceWorker && navigator.serviceWorker.controller);
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then(reg => {
+    // Home-screen apps often resume instead of restarting, so check for updates whenever the app comes back
+    document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") reg.update().catch(() => { }) });
+  }).catch(() => { });
+  let reloading = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (!hadController || reloading) return;
+    const busy = !!sheetName || (document.activeElement && /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName));
+    if (busy) { toast(t("updateReady")); return }
+    reloading = true; location.reload();
+  });
+}

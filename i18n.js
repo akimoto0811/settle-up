@@ -683,6 +683,7 @@ export function setLang(l) {
 // Translate everything in the page marked with data-i18n / data-i18n-ph
 export function applyStatic() {
   document.documentElement.lang = lang;
-  document.querySelectorAll("[data-i18n]").forEach(el => el.textContent = t(el.dataset.i18n));
-  document.querySelectorAll("[data-i18n-ph]").forEach(el => el.placeholder = t(el.dataset.i18nPh));
+  // If a word is missing (e.g. an older copy of this file), keep the English text already in the page
+  document.querySelectorAll("[data-i18n]").forEach(el => { const v = t(el.dataset.i18n); if (v !== el.dataset.i18n) el.textContent = v });
+  document.querySelectorAll("[data-i18n-ph]").forEach(el => { const v = t(el.dataset.i18nPh); if (v !== el.dataset.i18nPh) el.placeholder = v });
 }
